@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.XR;
 using UnityEngine.XR.Hands;
 
 public sealed class HandGestureFlightInput : MonoBehaviour
@@ -48,6 +49,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     public bool AudioWayfindingToggleRequested => audioWayfindingToggleRequested;
     public bool GhostChampionToggleRequested => ghostChampionToggleRequested;
     public bool UsingEditorDebugInput { get; private set; }
+    public string ActiveInputSource { get; private set; } = "None";
 
     public void ConsumeViewModeCycleRequest()
     {
@@ -117,30 +119,43 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             gestureCooldown -= Time.deltaTime;
         }
 
-        if (!EnsureSubsystem())
-        {
-            if (!TryUseEditorDebugInput())
-            {
-                HandsTracked = false;
-                HasUsableInput = false;
-                Throttle01 = 0f;
-                UsingEditorDebugInput = false;
-            }
-            return;
-        }
-
+        var hasHandSubsystem = EnsureSubsystem();
         UsingEditorDebugInput = false;
 
-        var leftTracked = TryGetMetaPinch(MetaAimHand.left, out var leftPinch) ||
-                          TryGetPinch(handSubsystem.leftHand, out leftPinch);
-        var rightPinch = 0f;
-        var rightTracked = TryGetMetaAimDirection(out var trackingDirection);
-        if (!TryGetMetaPinch(MetaAimHand.right, out rightPinch))
+        var leftTracked = TryGetMetaPinch(MetaAimHand.left, out var leftPinch);
+        if (!leftTracked && hasHandSubsystem)
         {
-            rightTracked = rightTracked && TryGetPinch(handSubsystem.rightHand, out rightPinch);
+            leftTracked = TryGetPinch(handSubsystem.leftHand, out leftPinch);
         }
 
+        if (!leftTracked)
+        {
+            leftTracked = TryGetControllerThrottle(out leftPinch);
+        }
+
+        var rightPinch = 0f;
+        var rightTracked = TryGetMetaAimDirection(out var trackingDirection);
+        var inputSource = rightTracked ? "Meta Aim" : "None";
+
         if (!rightTracked)
+        {
+            rightTracked = TryGetControllerAimDirection(out trackingDirection);
+            if (rightTracked)
+            {
+                inputSource = "Controller";
+            }
+        }
+
+        if (!TryGetMetaPinch(MetaAimHand.right, out rightPinch))
+        {
+            rightPinch = 0f;
+            if (hasHandSubsystem)
+            {
+                TryGetPinch(handSubsystem.rightHand, out rightPinch);
+            }
+        }
+
+        if (!rightTracked && hasHandSubsystem)
         {
             rightTracked = TryGetFingerDirection(handSubsystem.rightHand, out trackingDirection) &&
                            TryGetPinch(handSubsystem.rightHand, out rightPinch);
@@ -148,10 +163,16 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             {
                 trackingDirection = -trackingDirection;
             }
+
+            if (rightTracked)
+            {
+                inputSource = "XR Hands";
+            }
         }
 
         HandsTracked = leftTracked && rightTracked;
         Throttle01 = leftTracked ? Mathf.Clamp01(leftPinch) : 0f;
+        ActiveInputSource = HandsTracked ? inputSource : "No input";
 
         if (rightTracked && trackingDirection.sqrMagnitude > steeringDeadZone * steeringDeadZone)
         {
@@ -160,7 +181,17 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         HasUsableInput = HandsTracked && Throttle01 > 0.04f;
         UpdateModeGesture(leftPinch, rightPinch);
-        UpdateExtraGestures();
+        if (hasHandSubsystem)
+        {
+            UpdateExtraGestures();
+        }
+
+        if (!HandsTracked && !TryUseEditorDebugInput())
+        {
+            HasUsableInput = false;
+            Throttle01 = 0f;
+            UsingEditorDebugInput = false;
+        }
     }
 
     private Vector3 ResolveWorldMoveDirection(Vector3 trackingDirection)
@@ -195,6 +226,53 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         direction.Normalize();
         return true;
+    }
+
+    private bool TryGetControllerAimDirection(out Vector3 direction)
+    {
+        direction = Vector3.forward;
+
+        var rightController = XRController.rightHand;
+        if (rightController == null || rightController.deviceRotation == null)
+        {
+            return false;
+        }
+
+        if (rightController.trackingState != null)
+        {
+            var trackingState = rightController.trackingState.ReadValue();
+            if ((trackingState & (int)UnityEngine.XR.InputTrackingState.Rotation) == 0)
+            {
+                return false;
+            }
+        }
+
+        direction = rightController.deviceRotation.ReadValue() * Vector3.forward;
+        if (direction.sqrMagnitude < steeringDeadZone * steeringDeadZone)
+        {
+            return false;
+        }
+
+        direction.Normalize();
+        return true;
+    }
+
+    private static bool TryGetControllerThrottle(out float throttle01)
+    {
+        throttle01 = 0f;
+
+        var leftController = XRController.leftHand;
+        if (leftController == null)
+        {
+            return false;
+        }
+
+        var trigger = leftController.TryGetChildControl<UnityEngine.InputSystem.Controls.AxisControl>("trigger");
+        var grip = leftController.TryGetChildControl<UnityEngine.InputSystem.Controls.AxisControl>("grip");
+        var triggerValue = trigger != null ? trigger.ReadValue() : 0f;
+        var gripValue = grip != null ? grip.ReadValue() : 0f;
+        throttle01 = Mathf.Clamp01(Mathf.Max(triggerValue, gripValue));
+        return throttle01 > 0.01f;
     }
 
     private static bool TryGetMetaPinch(MetaAimHand hand, out float pinch01)

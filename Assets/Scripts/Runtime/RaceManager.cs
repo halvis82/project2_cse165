@@ -297,8 +297,10 @@ public sealed class RaceManager : MonoBehaviour
             else
             {
                 hud?.SetStatus(handInput != null && !handInput.HandsTracked
-                    ? "Show both hands"
-                    : "Right hand aims. Left pinch moves.");
+                    ? "Show hands or use controllers"
+                    : handInput != null && handInput.ActiveInputSource == "Controller"
+                        ? "Right controller aims. Left trigger moves."
+                        : "Right hand aims. Left pinch moves.");
             }
             statusClearAt = 0f;
         }

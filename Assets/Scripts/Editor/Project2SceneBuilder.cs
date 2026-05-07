@@ -472,7 +472,6 @@ public static class Project2SceneBuilder
         }
 
         AssetDatabase.SaveAssets();
-        CleanAndroidBuildArtifacts();
 
         if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
         {

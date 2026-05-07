@@ -14,6 +14,7 @@ using UnityEngine.XR.OpenXR.Features;
 using UnityEngine.XR.OpenXR.Features.MetaQuestSupport;
 using UnityEditor.XR.Management;
 using UnityEditor.XR.Management.Metadata;
+using UnityEditor.Android;
 
 public static class Project2SceneBuilder
 {
@@ -23,6 +24,7 @@ public static class Project2SceneBuilder
     private const string CheckpointPrefabPath = "Assets/Checkpoint.prefab";
     private const string MaterialFolder = "Assets/Materials";
     private const float InchesToMeters = 1f / 39.37f;
+    private const int MaxCheckpointCount = 100;
 
     [MenuItem("CSE165 Project 2/Rebuild Race Scene")]
     public static void RebuildRaceScene()
@@ -96,6 +98,108 @@ public static class Project2SceneBuilder
         EditorSceneManager.SaveOpenScenes();
         AssetDatabase.Refresh();
         Debug.Log($"Saved {checkpointRoot.transform.childCount} visible checkpoints to sample_track.xyz.");
+    }
+
+    [MenuItem("CSE165 Project 2/Import Competition XYZ...")]
+    public static void ImportCompetitionXyz()
+    {
+        var sourcePath = EditorUtility.OpenFilePanel("Import Competition XYZ", "", "xyz");
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return;
+        }
+
+        var content = File.ReadAllText(sourcePath);
+        var checkpoints = XyzTrackParser.Parse(content);
+        if (checkpoints.Count < 2)
+        {
+            Debug.LogError($"Competition track needs at least 2 valid checkpoints: {sourcePath}");
+            return;
+        }
+
+        if (checkpoints.Count > MaxCheckpointCount)
+        {
+            Debug.LogWarning($"Competition track has {checkpoints.Count} checkpoints. Runtime will use the first {MaxCheckpointCount}.");
+        }
+
+        var streamingFolder = Path.Combine(Directory.GetCurrentDirectory(), "Assets/StreamingAssets");
+        Directory.CreateDirectory(streamingFolder);
+        var destinationPath = Path.Combine(streamingFolder, "competition.xyz");
+        File.Copy(sourcePath, destinationPath, true);
+        var originalFileName = Path.GetFileName(sourcePath);
+        if (!string.Equals(originalFileName, "competition.xyz", System.StringComparison.OrdinalIgnoreCase))
+        {
+            File.Copy(sourcePath, Path.Combine(streamingFolder, originalFileName), true);
+        }
+
+        WriteTrackManifest(streamingFolder, originalFileName);
+        AssetDatabase.Refresh();
+        Debug.Log($"Imported competition track: {sourcePath} -> Assets/StreamingAssets/competition.xyz");
+    }
+
+    [MenuItem("CSE165 Project 2/Clear Competition XYZ")]
+    public static void ClearCompetitionXyz()
+    {
+        var competitionPath = Path.Combine(Directory.GetCurrentDirectory(), "Assets/StreamingAssets/competition.xyz");
+        if (!File.Exists(competitionPath))
+        {
+            Debug.Log("No Assets/StreamingAssets/competition.xyz file exists.");
+            return;
+        }
+
+        File.Delete(competitionPath);
+        var streamingFolder = Path.GetDirectoryName(competitionPath);
+        var manifestPath = Path.Combine(streamingFolder, "track_manifest.txt");
+        if (File.Exists(manifestPath))
+        {
+            foreach (var line in File.ReadAllLines(manifestPath))
+            {
+                var fileName = line.Trim();
+                if (string.IsNullOrWhiteSpace(fileName) ||
+                    string.Equals(fileName, "competition.xyz", System.StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(fileName, "sample_track.xyz", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var importedPath = Path.Combine(streamingFolder, fileName);
+                if (File.Exists(importedPath))
+                {
+                    File.Delete(importedPath);
+                }
+
+                var importedMetaPath = importedPath + ".meta";
+                if (File.Exists(importedMetaPath))
+                {
+                    File.Delete(importedMetaPath);
+                }
+            }
+
+            File.Delete(manifestPath);
+        }
+
+        var metaPath = competitionPath + ".meta";
+        if (File.Exists(metaPath))
+        {
+            File.Delete(metaPath);
+        }
+
+        AssetDatabase.Refresh();
+        Debug.Log("Removed Assets/StreamingAssets/competition.xyz. The scene/fallback track will load again.");
+    }
+
+    private static void WriteTrackManifest(string streamingFolder, string importedFileName)
+    {
+        var manifestPath = Path.Combine(streamingFolder, "track_manifest.txt");
+        var builder = new StringBuilder();
+        builder.AppendLine("competition.xyz");
+        if (!string.IsNullOrWhiteSpace(importedFileName) &&
+            !string.Equals(importedFileName, "competition.xyz", System.StringComparison.OrdinalIgnoreCase))
+        {
+            builder.AppendLine(importedFileName);
+        }
+
+        File.WriteAllText(manifestPath, builder.ToString());
     }
 
     [MenuItem("CSE165 Project 2/Snap Drone To Checkpoint 01")]
@@ -252,6 +356,7 @@ public static class Project2SceneBuilder
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
         PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel29;
         PlayerSettings.colorSpace = ColorSpace.Linear;
+        ConfigureAndroidExternalTools();
 
         var buildTargetSettings = GetOrCreateXRBuildTargetSettings();
         if (!buildTargetSettings.HasSettingsForBuildTarget(BuildTargetGroup.Android))
@@ -289,13 +394,77 @@ public static class Project2SceneBuilder
         AssetDatabase.SaveAssets();
     }
 
+    private static void ConfigureAndroidExternalTools()
+    {
+        var androidPlayerRoot = FindAndroidPlayerRoot();
+        if (string.IsNullOrWhiteSpace(androidPlayerRoot))
+        {
+            Debug.LogWarning("Could not locate Unity AndroidPlayer external tools folder.");
+            return;
+        }
+
+        SetAndroidToolPath(Path.Combine(androidPlayerRoot, "OpenJDK"), path => AndroidExternalToolsSettings.jdkRootPath = path, "JDK");
+        SetAndroidToolPath(Path.Combine(androidPlayerRoot, "SDK"), path => AndroidExternalToolsSettings.sdkRootPath = path, "SDK");
+        SetAndroidToolPath(Path.Combine(androidPlayerRoot, "NDK"), path => AndroidExternalToolsSettings.ndkRootPath = path, "NDK");
+        SetAndroidToolPath(Path.Combine(androidPlayerRoot, "Tools/gradle"), path => AndroidExternalToolsSettings.gradlePath = path, "Gradle");
+    }
+
+    private static string FindAndroidPlayerRoot()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(EditorApplication.applicationContentsPath, "PlaybackEngines/AndroidPlayer"),
+            Path.Combine(Directory.GetParent(EditorApplication.applicationContentsPath)?.Parent?.FullName ?? "", "PlaybackEngines/AndroidPlayer")
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return "";
+    }
+
+    private static void SetAndroidToolPath(string path, System.Action<string> setter, string toolName)
+    {
+        if (!Directory.Exists(path))
+        {
+            Debug.LogWarning($"Unity Android {toolName} path does not exist: {path}");
+            return;
+        }
+
+        setter(path);
+    }
+
+    [MenuItem("CSE165 Project 2/Clean Android Build Cache")]
+    public static void CleanAndroidBuildCache()
+    {
+        CleanAndroidBuildArtifacts();
+        Debug.Log("Cleaned generated Android build cache.");
+    }
+
     [MenuItem("CSE165 Project 2/Build And Run Quest")]
     public static void BuildAndRunQuest()
+    {
+        BuildQuestApk(autoRun: true);
+    }
+
+    [MenuItem("CSE165 Project 2/Build Quest APK")]
+    public static void BuildQuestApk()
+    {
+        BuildQuestApk(autoRun: false);
+    }
+
+    private static void BuildQuestApk(bool autoRun)
     {
         ConfigureQuestOpenXR();
         SetBuildScene(ScenePath);
         EditorSceneManager.SaveOpenScenes();
         AssetDatabase.SaveAssets();
+        CleanAndroidBuildArtifacts();
 
         if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
         {
@@ -312,16 +481,37 @@ public static class Project2SceneBuilder
             locationPathName = apkPath,
             targetGroup = BuildTargetGroup.Android,
             target = BuildTarget.Android,
-            options = BuildOptions.Development | BuildOptions.AutoRunPlayer
+            options = autoRun
+                ? BuildOptions.Development | BuildOptions.AutoRunPlayer
+                : BuildOptions.Development
         });
 
         if (report.summary.result == BuildResult.Succeeded)
         {
-            Debug.Log($"Built and launched Quest APK: {apkPath}");
+            Debug.Log(autoRun
+                ? $"Built and launched Quest APK: {apkPath}"
+                : $"Built Quest APK: {apkPath}");
         }
         else
         {
             Debug.LogError($"Quest build failed: {report.summary.result}");
+        }
+    }
+
+    private static void CleanAndroidBuildArtifacts()
+    {
+        DeleteGeneratedPath("Library/Bee/artifacts/Android");
+        DeleteGeneratedPath("Library/Bee/Android");
+        DeleteGeneratedPath("Library/Il2cppBuildCache");
+        DeleteGeneratedPath("Temp/StagingArea");
+    }
+
+    private static void DeleteGeneratedPath(string relativePath)
+    {
+        var path = Path.Combine(Directory.GetCurrentDirectory(), relativePath);
+        if (Directory.Exists(path) || File.Exists(path))
+        {
+            FileUtil.DeleteFileOrDirectory(path);
         }
     }
 

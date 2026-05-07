@@ -11,7 +11,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float pinchClosedDistanceMeters = 0.025f;
     [SerializeField] private float pinchOpenDistanceMeters = 0.12f;
     [SerializeField] private float steeringDeadZone = 0.08f;
-    [SerializeField] private bool useHeadRelativeSteering = true;
     [SerializeField] private bool invertJointFallbackDirection = true;
 
     [Header("Gestures")]
@@ -29,17 +28,59 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     private float viewSwitchHold;
     private float gestureCooldown;
     private bool viewModeCycleRequested;
+    private bool trackEditorToggleRequested;
+    private bool trackEditorAddCheckpointRequested;
+    private bool trackEditorSaveRequested;
+    private bool trackEditorLoadNextRequested;
+    private bool audioWayfindingToggleRequested;
+    private bool ghostChampionToggleRequested;
 
     public bool HandsTracked { get; private set; }
     public Vector3 WorldMoveDirection { get; private set; } = Vector3.forward;
     public float Throttle01 { get; private set; }
     public bool HasUsableInput { get; private set; }
     public bool ViewModeCycleRequested => viewModeCycleRequested;
+    public bool TrackEditorToggleRequested => trackEditorToggleRequested;
+    public bool TrackEditorAddCheckpointRequested => trackEditorAddCheckpointRequested;
+    public bool TrackEditorSaveRequested => trackEditorSaveRequested;
+    public bool TrackEditorLoadNextRequested => trackEditorLoadNextRequested;
+    public bool AudioWayfindingToggleRequested => audioWayfindingToggleRequested;
+    public bool GhostChampionToggleRequested => ghostChampionToggleRequested;
     public bool UsingEditorDebugInput { get; private set; }
 
     public void ConsumeViewModeCycleRequest()
     {
         viewModeCycleRequested = false;
+    }
+
+    public void ConsumeTrackEditorToggleRequest()
+    {
+        trackEditorToggleRequested = false;
+    }
+
+    public void ConsumeTrackEditorAddCheckpointRequest()
+    {
+        trackEditorAddCheckpointRequested = false;
+    }
+
+    public void ConsumeTrackEditorSaveRequest()
+    {
+        trackEditorSaveRequested = false;
+    }
+
+    public void ConsumeTrackEditorLoadNextRequest()
+    {
+        trackEditorLoadNextRequested = false;
+    }
+
+    public void ConsumeAudioWayfindingToggleRequest()
+    {
+        audioWayfindingToggleRequested = false;
+    }
+
+    public void ConsumeGhostChampionToggleRequest()
+    {
+        ghostChampionToggleRequested = false;
     }
 
     public void SetTrackingRoot(Transform root)
@@ -63,6 +104,12 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     private void Update()
     {
         viewModeCycleRequested = false;
+        trackEditorToggleRequested = false;
+        trackEditorAddCheckpointRequested = false;
+        trackEditorSaveRequested = false;
+        trackEditorLoadNextRequested = false;
+        audioWayfindingToggleRequested = false;
+        ghostChampionToggleRequested = false;
 
         if (gestureCooldown > 0f)
         {
@@ -112,6 +159,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         HasUsableInput = HandsTracked && Throttle01 > 0.04f;
         UpdateModeGesture(leftPinch, rightPinch);
+        UpdateExtraGestures();
     }
 
     private Vector3 ResolveWorldMoveDirection(Vector3 trackingDirection)
@@ -151,7 +199,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     private static bool TryGetMetaPinch(MetaAimHand hand, out float pinch01)
     {
         pinch01 = 0f;
-        if (hand == null || hand.pinchStrengthIndex == null)
+        if (!HasValidMetaAimHand(hand) || hand.pinchStrengthIndex == null)
         {
             return false;
         }
@@ -241,6 +289,107 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
     }
 
+    private void UpdateExtraGestures()
+    {
+        if (gestureCooldown > 0f)
+        {
+            return;
+        }
+
+        var left = MetaAimHand.left;
+        var right = MetaAimHand.right;
+        var rightMiddle = ReadGesturePinch(right, handSubsystem.rightHand, hand => hand.pinchStrengthMiddle, XRHandJointID.MiddleTip) > 0.85f;
+        var rightRing = ReadGesturePinch(right, handSubsystem.rightHand, hand => hand.pinchStrengthRing, XRHandJointID.RingTip) > 0.85f;
+        var rightLittle = ReadGesturePinch(right, handSubsystem.rightHand, hand => hand.pinchStrengthLittle, XRHandJointID.LittleTip) > 0.85f;
+        var leftMiddle = ReadGesturePinch(left, handSubsystem.leftHand, hand => hand.pinchStrengthMiddle, XRHandJointID.MiddleTip) > 0.85f;
+        var leftRing = ReadGesturePinch(left, handSubsystem.leftHand, hand => hand.pinchStrengthRing, XRHandJointID.RingTip) > 0.85f;
+        var leftLittle = ReadGesturePinch(left, handSubsystem.leftHand, hand => hand.pinchStrengthLittle, XRHandJointID.LittleTip) > 0.85f;
+
+        if (rightRing)
+        {
+            trackEditorToggleRequested = true;
+        }
+        else if (rightMiddle)
+        {
+            trackEditorAddCheckpointRequested = true;
+        }
+        else if (leftMiddle)
+        {
+            trackEditorSaveRequested = true;
+        }
+        else if (leftRing)
+        {
+            trackEditorLoadNextRequested = true;
+        }
+        else if (leftLittle)
+        {
+            audioWayfindingToggleRequested = true;
+        }
+        else if (rightLittle)
+        {
+            ghostChampionToggleRequested = true;
+        }
+        else
+        {
+            return;
+        }
+
+        gestureCooldown = gestureCooldownSeconds;
+    }
+
+    private delegate UnityEngine.InputSystem.Controls.AxisControl PinchSelector(MetaAimHand hand);
+
+    private float ReadGesturePinch(MetaAimHand metaHand, XRHand xrHand, PinchSelector selector, XRHandJointID fingerTipId)
+    {
+        var metaPinch = ReadMetaPinch(metaHand, selector);
+        if (metaPinch > 0f)
+        {
+            return metaPinch;
+        }
+
+        return TryGetFingerPinch(xrHand, fingerTipId, out var jointPinch) ? jointPinch : 0f;
+    }
+
+    private static float ReadMetaPinch(MetaAimHand hand, PinchSelector selector)
+    {
+        if (!HasValidMetaAimHand(hand))
+        {
+            return 0f;
+        }
+
+        var control = selector(hand);
+        return control != null ? Mathf.Clamp01(control.ReadValue()) : 0f;
+    }
+
+    private static bool HasValidMetaAimHand(MetaAimHand hand)
+    {
+        if (hand == null || hand.aimFlags == null)
+        {
+            return false;
+        }
+
+        var flags = (MetaAimFlags)(ulong)hand.aimFlags.ReadValue();
+        return (flags & MetaAimFlags.Computed) != MetaAimFlags.None &&
+               (flags & MetaAimFlags.Valid) != MetaAimFlags.None;
+    }
+
+    private bool TryGetFingerPinch(XRHand hand, XRHandJointID fingerTipId, out float pinch01)
+    {
+        pinch01 = 0f;
+
+        var thumbTip = hand.GetJoint(XRHandJointID.ThumbTip);
+        var fingerTip = hand.GetJoint(fingerTipId);
+        if (!thumbTip.TryGetPose(out var thumbPose) || !fingerTip.TryGetPose(out var fingerPose))
+        {
+            return false;
+        }
+
+        var distance = Vector3.Distance(thumbPose.position, fingerPose.position);
+        pinch01 = 1f - Mathf.InverseLerp(pinchClosedDistanceMeters, pinchOpenDistanceMeters, distance);
+        pinch01 = Mathf.Clamp01(pinch01);
+        return true;
+    }
+
     private bool TryUseEditorDebugInput()
     {
 #if UNITY_EDITOR
@@ -311,6 +460,36 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         if (keyboard.cKey.wasPressedThisFrame)
         {
             viewModeCycleRequested = true;
+            gestureCooldown = gestureCooldownSeconds;
+        }
+        else if (keyboard.tKey.wasPressedThisFrame)
+        {
+            trackEditorToggleRequested = true;
+            gestureCooldown = gestureCooldownSeconds;
+        }
+        else if (keyboard.vKey.wasPressedThisFrame)
+        {
+            trackEditorAddCheckpointRequested = true;
+            gestureCooldown = gestureCooldownSeconds;
+        }
+        else if (keyboard.bKey.wasPressedThisFrame)
+        {
+            trackEditorSaveRequested = true;
+            gestureCooldown = gestureCooldownSeconds;
+        }
+        else if (keyboard.nKey.wasPressedThisFrame)
+        {
+            trackEditorLoadNextRequested = true;
+            gestureCooldown = gestureCooldownSeconds;
+        }
+        else if (keyboard.xKey.wasPressedThisFrame)
+        {
+            audioWayfindingToggleRequested = true;
+            gestureCooldown = gestureCooldownSeconds;
+        }
+        else if (keyboard.gKey.wasPressedThisFrame)
+        {
+            ghostChampionToggleRequested = true;
             gestureCooldown = gestureCooldownSeconds;
         }
 

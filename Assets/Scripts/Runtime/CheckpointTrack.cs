@@ -8,10 +8,12 @@ using UnityEngine.Networking;
 public sealed class CheckpointTrack : MonoBehaviour
 {
     public const float RequiredRadiusMeters = 30f * 0.3048f;
+    public const int MaxCheckpointCount = 100;
 
     [Header("Loading")]
     [SerializeField] private TextAsset fallbackTrack;
     [SerializeField] private string competitionFileName = "competition.xyz";
+    [SerializeField] private string trackManifestFileName = "track_manifest.txt";
     [SerializeField] private string optionalAbsoluteTrackPath = "";
     [SerializeField] private bool preferSceneCheckpointsWhenNoCompetitionFile = true;
 
@@ -29,6 +31,7 @@ public sealed class CheckpointTrack : MonoBehaviour
     public IReadOnlyList<Vector3> Positions => positions;
     public float ReachRadiusMeters => RequiredRadiusMeters;
     public int Count => positions.Count;
+    public string LastLoadedSource { get; private set; } = "";
 
     public bool LoadTrack()
     {
@@ -37,11 +40,12 @@ public sealed class CheckpointTrack : MonoBehaviour
         var content = TryReadCompetitionTrack(out var source);
         if (!string.IsNullOrWhiteSpace(content))
         {
-            positions.AddRange(XyzTrackParser.Parse(content));
+            AddParsedPositions(content, source);
         }
 
         if (positions.Count == 0 && TryUseSceneCheckpoints(out source))
         {
+            LastLoadedSource = source;
             Debug.Log($"Loaded {positions.Count} checkpoints from {source}.");
             RebuildVisuals();
             return true;
@@ -49,8 +53,8 @@ public sealed class CheckpointTrack : MonoBehaviour
 
         if (positions.Count == 0 && fallbackTrack != null)
         {
-            positions.AddRange(XyzTrackParser.Parse(fallbackTrack.text));
             source = fallbackTrack.name;
+            AddParsedPositions(fallbackTrack.text, source);
         }
 
         if (positions.Count == 0)
@@ -59,6 +63,7 @@ public sealed class CheckpointTrack : MonoBehaviour
             return false;
         }
 
+        LastLoadedSource = source;
         Debug.Log($"Loaded {positions.Count} checkpoints from {source}.");
         RebuildVisuals();
         return true;
@@ -72,28 +77,24 @@ public sealed class CheckpointTrack : MonoBehaviour
 
         if (string.IsNullOrWhiteSpace(content))
         {
-            var streamingCompetitionPath = Path.Combine(Application.streamingAssetsPath, competitionFileName);
-            if (LooksLikeUrl(streamingCompetitionPath))
+            if (LooksLikeUrl(Application.streamingAssetsPath))
             {
-                using (var request = UnityWebRequest.Get(streamingCompetitionPath))
+                yield return TryReadStreamingAssetsUrlTrack(result =>
                 {
-                    yield return request.SendWebRequest();
-                    if (request.result == UnityWebRequest.Result.Success)
-                    {
-                        content = request.downloadHandler.text;
-                        source = streamingCompetitionPath;
-                    }
-                }
+                    content = result.Content;
+                    source = result.Source;
+                });
             }
         }
 
         if (!string.IsNullOrWhiteSpace(content))
         {
-            positions.AddRange(XyzTrackParser.Parse(content));
+            AddParsedPositions(content, source);
         }
 
         if (positions.Count == 0 && TryUseSceneCheckpoints(out source))
         {
+            LastLoadedSource = source;
             Debug.Log($"Loaded {positions.Count} checkpoints from {source}.");
             RebuildVisuals();
             completed?.Invoke(true);
@@ -102,8 +103,8 @@ public sealed class CheckpointTrack : MonoBehaviour
 
         if (positions.Count == 0 && fallbackTrack != null)
         {
-            positions.AddRange(XyzTrackParser.Parse(fallbackTrack.text));
             source = fallbackTrack.name;
+            AddParsedPositions(fallbackTrack.text, source);
         }
 
         if (positions.Count == 0)
@@ -113,6 +114,7 @@ public sealed class CheckpointTrack : MonoBehaviour
             yield break;
         }
 
+        LastLoadedSource = source;
         Debug.Log($"Loaded {positions.Count} checkpoints from {source}.");
         RebuildVisuals();
         completed?.Invoke(true);
@@ -162,6 +164,70 @@ public sealed class CheckpointTrack : MonoBehaviour
         }
     }
 
+    public void SetRuntimePositions(IEnumerable<Vector3> newPositions, string source)
+    {
+        positions.Clear();
+        positions.AddRange(newPositions.Take(MaxCheckpointCount));
+        LastLoadedSource = source;
+        Debug.Log($"Loaded {positions.Count} checkpoints from {source}.");
+        RebuildVisuals();
+    }
+
+    public bool AppendRuntimeCheckpoint(Vector3 position)
+    {
+        if (positions.Count >= MaxCheckpointCount)
+        {
+            Debug.LogWarning($"Ignoring checkpoint. Track is already at the {MaxCheckpointCount} checkpoint limit.");
+            return false;
+        }
+
+        positions.Add(position);
+        RebuildVisuals();
+        return true;
+    }
+
+    public bool TryLoadXyzFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        var parsed = XyzTrackParser.Parse(File.ReadAllText(path));
+        if (parsed.Count > MaxCheckpointCount)
+        {
+            Debug.LogWarning($"Track {path} has {parsed.Count} checkpoints. Using the first {MaxCheckpointCount}.");
+        }
+
+        var loaded = parsed.Take(MaxCheckpointCount).ToList();
+        if (loaded.Count < 2)
+        {
+            Debug.LogWarning($"Track file needs at least two checkpoints: {path}");
+            return false;
+        }
+
+        SetRuntimePositions(loaded, path);
+        return true;
+    }
+
+    public void SaveCurrentTrackToXyz(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        var lines = positions.Select(position =>
+        {
+            var inches = position / XyzTrackParser.InchesToMeters;
+            return string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "{0:0.###} {1:0.###} {2:0.###}",
+                inches.x,
+                inches.y,
+                inches.z);
+        });
+
+        File.WriteAllLines(path, lines);
+        Debug.Log($"Saved {positions.Count} checkpoints to {path}.");
+    }
+
     private string TryReadCompetitionTrack(out string source)
     {
         source = "";
@@ -169,17 +235,21 @@ public sealed class CheckpointTrack : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(optionalAbsoluteTrackPath))
         {
-            candidates.Add(optionalAbsoluteTrackPath);
+            if (File.Exists(optionalAbsoluteTrackPath))
+            {
+                source = optionalAbsoluteTrackPath;
+                return File.ReadAllText(optionalAbsoluteTrackPath);
+            }
         }
 
-        candidates.Add(Path.Combine(Application.persistentDataPath, competitionFileName));
-        var streamingCompetitionPath = Path.Combine(Application.streamingAssetsPath, competitionFileName);
-        if (!LooksLikeUrl(streamingCompetitionPath))
+        AddTrackCandidates(candidates, Application.persistentDataPath);
+
+        if (!LooksLikeUrl(Application.streamingAssetsPath))
         {
-            candidates.Add(streamingCompetitionPath);
+            AddTrackCandidates(candidates, Application.streamingAssetsPath);
         }
 
-        foreach (var candidate in candidates.Distinct())
+        foreach (var candidate in PrioritizeTrackCandidates(candidates))
         {
             if (!File.Exists(candidate))
             {
@@ -191,6 +261,89 @@ public sealed class CheckpointTrack : MonoBehaviour
         }
 
         return "";
+    }
+
+    private void AddTrackCandidates(List<string> candidates, string folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return;
+        }
+
+        candidates.Add(Path.Combine(folder, competitionFileName));
+
+        if (!Directory.Exists(folder))
+        {
+            return;
+        }
+
+        foreach (var path in Directory.GetFiles(folder, "*.xyz", SearchOption.TopDirectoryOnly))
+        {
+            candidates.Add(path);
+        }
+    }
+
+    private IEnumerable<string> PrioritizeTrackCandidates(IEnumerable<string> candidates)
+    {
+        return candidates
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct()
+            .OrderByDescending(path => string.Equals(Path.GetFileName(path), competitionFileName, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(path => string.Equals(Path.GetFileName(path), "sample_track.xyz", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private System.Collections.IEnumerator TryReadStreamingAssetsUrlTrack(Action<TrackReadResult> completed)
+    {
+        var triedNames = new List<string> { competitionFileName };
+        var manifestUrl = CombineStreamingAssetUrl(Application.streamingAssetsPath, trackManifestFileName);
+        using (var request = UnityWebRequest.Get(manifestUrl))
+        {
+            yield return request.SendWebRequest();
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                foreach (var line in request.downloadHandler.text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var name = line.Trim();
+                    if (name.EndsWith(".xyz", StringComparison.OrdinalIgnoreCase))
+                    {
+                        triedNames.Add(name);
+                    }
+                }
+            }
+        }
+
+        foreach (var name in triedNames.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var trackUrl = CombineStreamingAssetUrl(Application.streamingAssetsPath, name);
+            using (var request = UnityWebRequest.Get(trackUrl))
+            {
+                yield return request.SendWebRequest();
+                if (request.result == UnityWebRequest.Result.Success && !string.IsNullOrWhiteSpace(request.downloadHandler.text))
+                {
+                    completed?.Invoke(new TrackReadResult(request.downloadHandler.text, trackUrl));
+                    yield break;
+                }
+            }
+        }
+
+        completed?.Invoke(default);
+    }
+
+    private static string CombineStreamingAssetUrl(string root, string fileName)
+    {
+        return root.TrimEnd('/') + "/" + fileName.TrimStart('/');
+    }
+
+    private void AddParsedPositions(string content, string source)
+    {
+        var parsed = XyzTrackParser.Parse(content);
+        if (parsed.Count > MaxCheckpointCount)
+        {
+            Debug.LogWarning($"Track {source} has {parsed.Count} checkpoints. Using the first {MaxCheckpointCount}.");
+        }
+
+        positions.AddRange(parsed.Take(MaxCheckpointCount));
     }
 
     private bool TryUseSceneCheckpoints(out string source)
@@ -212,6 +365,18 @@ public sealed class CheckpointTrack : MonoBehaviour
     private static bool LooksLikeUrl(string path)
     {
         return path.Contains("://") || path.Contains("jar:");
+    }
+
+    private struct TrackReadResult
+    {
+        public readonly string Content;
+        public readonly string Source;
+
+        public TrackReadResult(string content, string source)
+        {
+            Content = content;
+            Source = source;
+        }
     }
 
     private void RebuildVisuals()

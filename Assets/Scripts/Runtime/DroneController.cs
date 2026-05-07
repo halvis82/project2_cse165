@@ -15,6 +15,7 @@ public sealed class DroneController : MonoBehaviour
 
     public bool ControlsEnabled { get; set; }
     public float CurrentSpeedMetersPerSecond { get; private set; }
+    public Vector3 CurrentMoveDirection { get; private set; } = Vector3.forward;
 
     public void SetInput(HandGestureFlightInput input)
     {
@@ -58,6 +59,11 @@ public sealed class DroneController : MonoBehaviour
         }
 
         var direction = handInput.WorldMoveDirection.normalized;
+        if (direction.sqrMagnitude > 0.001f)
+        {
+            CurrentMoveDirection = direction;
+        }
+
         var nextPosition = body.position + direction * (currentSpeedMetersPerSecond * Time.fixedDeltaTime);
         body.MovePosition(nextPosition);
 

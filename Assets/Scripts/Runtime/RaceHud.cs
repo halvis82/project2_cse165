@@ -102,4 +102,17 @@ public sealed class RaceHud : MonoBehaviour
             speedText.text = $"{metersPerSecond:0} m/s";
         }
     }
+
+    public void SetWayfindingVisible(bool visible)
+    {
+        if (targetText != null)
+        {
+            targetText.gameObject.SetActive(visible);
+        }
+
+        if (arrowText != null)
+        {
+            arrowText.gameObject.SetActive(visible);
+        }
+    }
 }

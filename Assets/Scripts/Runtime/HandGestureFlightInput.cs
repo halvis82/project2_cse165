@@ -11,6 +11,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float pinchClosedDistanceMeters = 0.025f;
     [SerializeField] private float pinchOpenDistanceMeters = 0.12f;
     [SerializeField] private float steeringDeadZone = 0.08f;
+    [SerializeField] private bool invertMetaAimDirection = true;
     [SerializeField] private bool invertJointFallbackDirection = true;
 
     [Header("Gestures")]
@@ -186,7 +187,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             return false;
         }
 
-        direction = rightHand.deviceRotation.ReadValue() * Vector3.forward;
+        direction = rightHand.deviceRotation.ReadValue() * (invertMetaAimDirection ? Vector3.back : Vector3.forward);
         if (direction.sqrMagnitude < steeringDeadZone * steeringDeadZone)
         {
             return false;

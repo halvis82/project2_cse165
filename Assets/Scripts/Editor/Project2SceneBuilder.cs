@@ -462,7 +462,15 @@ public static class Project2SceneBuilder
     {
         ConfigureQuestOpenXR();
         SetBuildScene(ScenePath);
-        EditorSceneManager.SaveOpenScenes();
+        if (Application.isBatchMode)
+        {
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        }
+        else
+        {
+            EditorSceneManager.SaveOpenScenes();
+        }
+
         AssetDatabase.SaveAssets();
         CleanAndroidBuildArtifacts();
 

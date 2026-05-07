@@ -13,6 +13,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float pinchOpenDistanceMeters = 0.12f;
     [SerializeField] private float steeringDeadZone = 0.08f;
     [SerializeField] private bool invertMetaAimDirection = true;
+    [SerializeField] private bool invertControllerAimDirection = true;
     [SerializeField] private bool invertJointFallbackDirection = true;
 
     [Header("Gestures")]
@@ -101,6 +102,11 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         if (steeringReference == null && Camera.main != null)
         {
             steeringReference = Camera.main.transform;
+        }
+
+        if (GetComponent<XRHandModelVisualizer>() == null)
+        {
+            gameObject.AddComponent<XRHandModelVisualizer>();
         }
     }
 
@@ -247,7 +253,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             }
         }
 
-        direction = rightController.deviceRotation.ReadValue() * Vector3.forward;
+        direction = rightController.deviceRotation.ReadValue() * (invertControllerAimDirection ? Vector3.back : Vector3.forward);
         if (direction.sqrMagnitude < steeringDeadZone * steeringDeadZone)
         {
             return false;

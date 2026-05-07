@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1050" viewBox="0 0 1400 1050">
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #202124; }
+    .title { font-size: 28px; font-weight: 700; }
+    .label { font-size: 20px; font-weight: 700; }
+    .body { font-size: 16px; }
+    .panel { fill: #f7f8fa; stroke: #2f3b45; stroke-width: 2; rx: 10; }
+    .drone { fill: #323b45; }
+    .hand { fill: #f6c7a8; stroke: #8b5b44; stroke-width: 2; }
+    .path { fill: none; stroke: #2d7ff9; stroke-width: 4; stroke-dasharray: 10 8; }
+    .way { fill: #d936ff; opacity: 0.75; }
+    .arrow { stroke: #f2b705; stroke-width: 7; marker-end: url(#arrowhead); }
+    .audio { fill: none; stroke: #00a884; stroke-width: 3; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#f2b705"/>
+    </marker>
+  </defs>
+  <text x="40" y="45" class="title">Project 2 Travel and Wayfinding Storyboards</text>
+
+  <rect x="40" y="80" width="410" height="280" class="panel"/>
+  <text x="65" y="115" class="label">Travel 1: Point and Pinch</text>
+  <circle cx="110" cy="225" r="34" class="hand"/>
+  <line x1="140" y1="220" x2="255" y2="170" class="arrow"/>
+  <rect x="285" y="145" width="56" height="28" class="drone"/>
+  <circle cx="275" cy="140" r="13" class="drone"/>
+  <circle cx="351" cy="140" r="13" class="drone"/>
+  <path d="M340 160 C365 150 390 130 410 105" class="path"/>
+  <text x="65" y="315" class="body">Right hand aims; left pinch controls speed.</text>
+
+  <rect x="495" y="80" width="410" height="280" class="panel"/>
+  <text x="520" y="115" class="label">Travel 2: Two-Hand Lever</text>
+  <circle cx="585" cy="220" r="30" class="hand"/>
+  <circle cx="725" cy="220" r="30" class="hand"/>
+  <line x1="610" y1="220" x2="700" y2="220" stroke="#2f3b45" stroke-width="10"/>
+  <line x1="710" y1="205" x2="820" y2="155" class="arrow"/>
+  <rect x="835" y="135" width="56" height="28" class="drone"/>
+  <text x="520" y="315" class="body">Viable, but both hands are occupied continuously.</text>
+
+  <rect x="950" y="80" width="410" height="280" class="panel"/>
+  <text x="975" y="115" class="label">Travel 3: Palm Tilt Joystick</text>
+  <ellipse cx="1045" cy="225" rx="55" ry="35" class="hand" transform="rotate(-25 1045 225)"/>
+  <line x1="1085" y1="195" x2="1210" y2="150" class="arrow"/>
+  <rect x="1230" y="132" width="56" height="28" class="drone"/>
+  <text x="975" y="315" class="body">Rejected because palm tilt is easy to misread.</text>
+
+  <rect x="40" y="410" width="410" height="280" class="panel"/>
+  <text x="65" y="445" class="label">Wayfinding 1: World Line</text>
+  <rect x="100" y="565" width="56" height="28" class="drone"/>
+  <circle cx="345" cy="500" r="34" class="way"/>
+  <line x1="156" y1="565" x2="325" y2="510" class="arrow"/>
+  <text x="65" y="645" class="body">World-space line points to the active checkpoint.</text>
+
+  <rect x="495" y="410" width="410" height="280" class="panel"/>
+  <text x="520" y="445" class="label">Wayfinding 2: HUD Arrow</text>
+  <rect x="565" y="485" width="270" height="145" fill="#1f2933" rx="8"/>
+  <text x="590" y="525" fill="#fff" class="label">CP 4/10  87m</text>
+  <line x1="700" y1="590" x2="760" y2="540" class="arrow"/>
+  <text x="520" y="645" class="body">Head-space cue remains readable while looking around.</text>
+
+  <rect x="950" y="410" width="410" height="280" class="panel"/>
+  <text x="975" y="445" class="label">Wayfinding 3: Spatial Audio</text>
+  <circle cx="1185" cy="530" r="28" class="way"/>
+  <circle cx="1185" cy="530" r="55" class="audio"/>
+  <circle cx="1185" cy="530" r="85" class="audio" opacity="0.55"/>
+  <rect x="1030" y="575" width="56" height="28" class="drone"/>
+  <text x="975" y="645" class="body">Audio-only mode disables visual wayfinding aids.</text>
+
+  <text x="40" y="760" class="title">Final Selected Design</text>
+  <text x="40" y="800" class="body">Travel: right-hand aim direction plus left-hand pinch throttle.</text>
+  <text x="40" y="830" class="body">Wayfinding: world-space line/arrow, head-space HUD indicator, optional spatial audio pulse.</text>
+  <text x="40" y="860" class="body">Motion mitigation: first-person, cockpit, and third-person camera modes switchable by hand gesture.</text>
+</svg>

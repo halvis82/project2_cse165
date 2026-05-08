@@ -297,10 +297,8 @@ public sealed class RaceManager : MonoBehaviour
             else
             {
                 hud?.SetStatus(handInput != null && !handInput.HandsTracked
-                    ? "Show hands or use controllers"
-                    : handInput != null && handInput.ActiveInputSource == "Controller"
-                        ? "Right controller aims. Left trigger moves."
-                        : "Right hand aims. Left pinch moves.");
+                    ? "Left pinch/trigger to fly"
+                    : "Look steers. Right height climbs.");
             }
             statusClearAt = 0f;
         }

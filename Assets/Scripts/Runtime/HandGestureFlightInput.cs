@@ -11,10 +11,10 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private Transform steeringReference;
     [SerializeField] private float pinchClosedDistanceMeters = 0.025f;
     [SerializeField] private float pinchOpenDistanceMeters = 0.12f;
-    [SerializeField] private float steeringDeadZone = 0.08f;
-    [SerializeField] private bool invertMetaAimDirection = true;
-    [SerializeField] private bool invertControllerAimDirection = true;
-    [SerializeField] private bool invertJointFallbackDirection = true;
+    [SerializeField] private float rightHandNeutralBelowHeadMeters = 0.35f;
+    [SerializeField] private float verticalDeadZoneMeters = 0.12f;
+    [SerializeField] private float verticalFullRangeMeters = 0.75f;
+    [SerializeField] private float verticalDirectionWeight = 1.15f;
 
     [Header("Gestures")]
     [SerializeField] private float viewSwitchHoldSeconds = 0.75f;
@@ -140,18 +140,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
 
         var rightPinch = 0f;
-        var rightTracked = TryGetMetaAimDirection(out var trackingDirection);
-        var inputSource = rightTracked ? "Meta Aim" : "None";
-
-        if (!rightTracked)
-        {
-            rightTracked = TryGetControllerAimDirection(out trackingDirection);
-            if (rightTracked)
-            {
-                inputSource = "Controller";
-            }
-        }
-
         if (!TryGetMetaPinch(MetaAimHand.right, out rightPinch))
         {
             rightPinch = 0f;
@@ -161,28 +149,16 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             }
         }
 
-        if (!rightTracked && hasHandSubsystem)
-        {
-            rightTracked = TryGetFingerDirection(handSubsystem.rightHand, out trackingDirection) &&
-                           TryGetPinch(handSubsystem.rightHand, out rightPinch);
-            if (rightTracked && invertJointFallbackDirection)
-            {
-                trackingDirection = -trackingDirection;
-            }
-
-            if (rightTracked)
-            {
-                inputSource = "XR Hands";
-            }
-        }
-
-        HandsTracked = leftTracked && rightTracked;
+        var rightHeightTracked = TryGetRightHandVerticalInput(hasHandSubsystem, out var verticalInput, out var verticalSource);
+        HandsTracked = leftTracked;
         Throttle01 = leftTracked ? Mathf.Clamp01(leftPinch) : 0f;
-        ActiveInputSource = HandsTracked ? inputSource : "No input";
+        ActiveInputSource = HandsTracked
+            ? rightHeightTracked ? $"Look + {verticalSource}" : "Look"
+            : "No input";
 
-        if (rightTracked && trackingDirection.sqrMagnitude > steeringDeadZone * steeringDeadZone)
+        if (TryBuildSupermanMoveDirection(verticalInput, out var moveDirection))
         {
-            WorldMoveDirection = ResolveWorldMoveDirection(trackingDirection);
+            WorldMoveDirection = moveDirection;
         }
 
         HasUsableInput = HandsTracked && Throttle01 > 0.04f;
@@ -200,66 +176,132 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
     }
 
-    private Vector3 ResolveWorldMoveDirection(Vector3 trackingDirection)
-    {
-        return trackingToWorldRoot != null
-            ? trackingToWorldRoot.TransformDirection(trackingDirection).normalized
-            : trackingDirection.normalized;
-    }
-
-    private bool TryGetMetaAimDirection(out Vector3 direction)
+    private bool TryBuildSupermanMoveDirection(float verticalInput, out Vector3 direction)
     {
         direction = Vector3.forward;
 
-        var rightHand = MetaAimHand.right;
-        if (rightHand == null || rightHand.aimFlags == null || rightHand.deviceRotation == null)
+        var forward = steeringReference != null ? steeringReference.forward : Vector3.forward;
+        forward.y = 0f;
+        if (forward.sqrMagnitude < 0.001f)
+        {
+            forward = transform.forward;
+            forward.y = 0f;
+        }
+
+        if (forward.sqrMagnitude < 0.001f)
         {
             return false;
         }
 
-        var flags = (MetaAimFlags)(ulong)rightHand.aimFlags.ReadValue();
-        if ((flags & MetaAimFlags.Computed) == MetaAimFlags.None ||
-            (flags & MetaAimFlags.Valid) == MetaAimFlags.None)
+        forward.Normalize();
+        direction = forward + Vector3.up * (verticalInput * verticalDirectionWeight);
+        if (direction.sqrMagnitude < 0.001f)
         {
-            return false;
-        }
-
-        direction = rightHand.deviceRotation.ReadValue() * (invertMetaAimDirection ? Vector3.back : Vector3.forward);
-        if (direction.sqrMagnitude < steeringDeadZone * steeringDeadZone)
-        {
-            return false;
+            direction = forward;
         }
 
         direction.Normalize();
         return true;
     }
 
-    private bool TryGetControllerAimDirection(out Vector3 direction)
+    private bool TryGetRightHandVerticalInput(bool hasHandSubsystem, out float verticalInput, out string source)
     {
-        direction = Vector3.forward;
+        verticalInput = 0f;
+        source = "";
 
-        var rightController = XRController.rightHand;
-        if (rightController == null || rightController.deviceRotation == null)
+        if (!TryGetRightHandPosition(hasHandSubsystem, out var handPosition, out source))
         {
             return false;
         }
 
-        if (rightController.trackingState != null)
+        var worldHandPosition = trackingToWorldRoot != null
+            ? trackingToWorldRoot.TransformPoint(handPosition)
+            : handPosition;
+        var referenceY = steeringReference != null ? steeringReference.position.y : transform.position.y + 1.45f;
+        var neutralY = referenceY - rightHandNeutralBelowHeadMeters;
+        var offset = worldHandPosition.y - neutralY;
+        var magnitude = Mathf.Abs(offset);
+        if (magnitude <= verticalDeadZoneMeters)
         {
-            var trackingState = rightController.trackingState.ReadValue();
-            if ((trackingState & (int)UnityEngine.XR.InputTrackingState.Rotation) == 0)
+            verticalInput = 0f;
+            return true;
+        }
+
+        var range = Mathf.Max(verticalDeadZoneMeters + 0.01f, verticalFullRangeMeters);
+        verticalInput = Mathf.Sign(offset) * Mathf.InverseLerp(verticalDeadZoneMeters, range, magnitude);
+        verticalInput = Mathf.Clamp(verticalInput, -1f, 1f);
+        return true;
+    }
+
+    private bool TryGetRightHandPosition(bool hasHandSubsystem, out Vector3 position, out string source)
+    {
+        source = "";
+
+        if (TryGetMetaHandPosition(MetaAimHand.right, out position))
+        {
+            source = "right hand height";
+            return true;
+        }
+
+        if (TryGetControllerPosition(XRController.rightHand, out position))
+        {
+            source = "right controller height";
+            return true;
+        }
+
+        if (hasHandSubsystem && TryGetJointPosition(handSubsystem.rightHand, XRHandJointID.Palm, out position))
+        {
+            source = "right hand height";
+            return true;
+        }
+
+        position = Vector3.zero;
+        return false;
+    }
+
+    private static bool TryGetMetaHandPosition(MetaAimHand hand, out Vector3 position)
+    {
+        position = Vector3.zero;
+        if (hand == null || hand.devicePosition == null)
+        {
+            return false;
+        }
+
+        position = hand.devicePosition.ReadValue();
+        return true;
+    }
+
+    private static bool TryGetControllerPosition(XRController controller, out Vector3 position)
+    {
+        position = Vector3.zero;
+        if (controller == null || controller.devicePosition == null)
+        {
+            return false;
+        }
+
+        if (controller.trackingState != null)
+        {
+            var trackingState = controller.trackingState.ReadValue();
+            if ((trackingState & (int)UnityEngine.XR.InputTrackingState.Position) == 0)
             {
                 return false;
             }
         }
 
-        direction = rightController.deviceRotation.ReadValue() * (invertControllerAimDirection ? Vector3.back : Vector3.forward);
-        if (direction.sqrMagnitude < steeringDeadZone * steeringDeadZone)
+        position = controller.devicePosition.ReadValue();
+        return true;
+    }
+
+    private static bool TryGetJointPosition(XRHand hand, XRHandJointID jointId, out Vector3 position)
+    {
+        position = Vector3.zero;
+        var joint = hand.GetJoint(jointId);
+        if (!joint.TryGetPose(out var pose))
         {
             return false;
         }
 
-        direction.Normalize();
+        position = pose.position;
         return true;
     }
 
@@ -311,27 +353,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
 
         return false;
-    }
-
-    private bool TryGetFingerDirection(XRHand hand, out Vector3 direction)
-    {
-        direction = Vector3.forward;
-
-        var palm = hand.GetJoint(XRHandJointID.Palm);
-        var indexTip = hand.GetJoint(XRHandJointID.IndexTip);
-        if (!palm.TryGetPose(out var palmPose) || !indexTip.TryGetPose(out var indexPose))
-        {
-            return false;
-        }
-
-        direction = indexPose.position - palmPose.position;
-        if (direction.sqrMagnitude < 0.0004f)
-        {
-            direction = palmPose.rotation * Vector3.forward;
-        }
-
-        direction.Normalize();
-        return true;
     }
 
     private bool TryGetPinch(XRHand hand, out float pinch01)

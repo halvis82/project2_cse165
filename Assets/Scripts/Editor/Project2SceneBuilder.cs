@@ -105,7 +105,7 @@ public static class Project2SceneBuilder
     [MenuItem("CSE165 Project 2/Import Competition XYZ...")]
     public static void ImportCompetitionXyz()
     {
-        var sourcePath = EditorUtility.OpenFilePanel("Import Competition XYZ", "", "xyz");
+        var sourcePath = OpenTrackFilePanel("Import Competition Track");
         if (string.IsNullOrWhiteSpace(sourcePath))
         {
             return;
@@ -142,7 +142,7 @@ public static class Project2SceneBuilder
     [MenuItem("CSE165 Project 2/Install Competition XYZ To Connected Quest...")]
     public static void InstallCompetitionXyzToQuest()
     {
-        var sourcePath = EditorUtility.OpenFilePanel("Install Competition XYZ To Quest", "", "xyz");
+        var sourcePath = OpenTrackFilePanel("Install Competition Track To Quest");
         if (string.IsNullOrWhiteSpace(sourcePath))
         {
             return;
@@ -245,6 +245,14 @@ public static class Project2SceneBuilder
         }
 
         File.WriteAllText(manifestPath, builder.ToString());
+    }
+
+    private static string OpenTrackFilePanel(string title)
+    {
+        return EditorUtility.OpenFilePanelWithFilters(
+            title,
+            "",
+            new[] { "Track files", "xyz,txt", "XYZ", "xyz", "Text", "txt", "All files", "*" });
     }
 
     private static string FindAdbPath()

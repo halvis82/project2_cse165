@@ -6,7 +6,7 @@ This project implements a Meta Quest hand-tracked drone navigation trainer at Ma
 
 ## Selected Interaction Design
 
-The final travel technique uses left-hand thumb-index pinch as analog throttle and right-hand aim direction as the flight vector. The user can look around independently because head orientation is not used for steering. This keeps travel continuous, avoids autopilot, and makes the mapping close to pointing a real drone in the intended direction.
+The final travel technique uses a two-fist relative vector: both hands must be tracked and closed, and the vector from the left fist to the right fist becomes the flight direction. Opening either hand, losing tracking, or holding the fists too close together stops the drone immediately. The user can look around independently because head orientation is not used for steering.
 
 The final wayfinding technique combines world-space aids and head-space aids. In normal mode, the user sees checkpoint spheres, a world line/arrow toward the next checkpoint, and HUD target distance/heading. In audio-only extra-credit mode, visual wayfinding is disabled except checkpoint display, and a spatialized pulse emits from the active waypoint.
 
@@ -14,13 +14,13 @@ The final wayfinding technique combines world-space aids and head-space aids. In
 
 ![Travel and wayfinding storyboards](storyboards/project2_storyboards.svg)
 
-### Travel 1: Point-and-Pinch Flight
+### Travel 1: Two-Fist Relative Flight
 
-The user points the right hand toward the desired travel direction and pinches with the left hand to move. Releasing the pinch decelerates to a stop. This was selected because it is direct, fast to learn, and satisfies the no-head-steering requirement.
+The user closes both hands into fists. The left fist acts as an anchor, and the right fist's position relative to it controls direction: right fist left of the left fist moves left, right fist forward of the left fist moves forward, and vertical offsets climb or descend. Opening either hand stops immediately. This was selected because it satisfies the no-head-steering requirement and prevents drift when tracking is uncertain.
 
-### Travel 2: Two-Hand Throttle Lever
+### Travel 2: Point-and-Pinch Flight
 
-The user holds both hands as if gripping a virtual throttle bar; hand separation controls speed and the bar direction controls flight. This was viable but rejected because it occupies both hands continuously and makes view-switching or editing gestures harder.
+The user points the right hand toward the desired travel direction and pinches with the left hand to move. This was viable but rejected because it can become ambiguous if the hand aim pose feels coupled to where the user is looking.
 
 ### Travel 3: Palm Tilt Joystick
 
@@ -45,8 +45,8 @@ The active waypoint emits a spatialized pulse. This was selected as extra credit
 | Heuristic | Violation and rationale | Severity | Recommendation |
 | --- | --- | --- | --- |
 | Visibility of system status | Mostly satisfied. Countdown, timer, speed, checkpoint index, status text, and view mode are visible. | 0 | Keep status messages short so they do not distract during racing. |
-| Match between system and real world | Mostly satisfied. Pointing to fly and spatial waypoint audio map naturally to drone piloting and navigation. | 0 | In demo narration, explicitly describe left pinch as throttle and right aim as direction. |
-| User control and freedom | Mostly satisfied. User can stop by releasing throttle, switch views, toggle audio-only mode, and reset through crash recovery. | 1 | Add an explicit restart gesture in a future version if time allows. |
+| Match between system and real world | Mostly satisfied. Two-handed steering and spatial waypoint audio map naturally to drone piloting and navigation. | 0 | In demo narration, explicitly describe the left fist as the anchor and the right fist as the direction handle. |
+| User control and freedom | Mostly satisfied. User can stop by opening either hand, switch views, toggle audio-only mode, and reset through crash recovery. | 1 | Add an explicit restart gesture in a future version if time allows. |
 | Consistency and standards | Mostly satisfied. Checkpoints use stable colors and ordered numbering; HUD uses conventional timer/speed displays. | 0 | Keep all demo terminology consistent: checkpoint, waypoint, race, crash reset. |
 | Error prevention | Partially satisfied. No autopilot or collision avoidance is allowed, but crash recovery prevents unrecoverable states. | 1 | Keep visible checkpoint spheres enabled even in audio-only mode, as allowed by the writeup. |
 | Recognition rather than recall | Mostly satisfied. HUD and world arrows reduce memory burden; status text names editor/test actions. | 1 | For final demo, show the gesture list briefly before headset footage. |

@@ -21,8 +21,9 @@
 ### 2. Flight Controls
 
 - Quest build flight uses hand tracking only.
-- Left thumb-index pinch controls throttle.
-- Right hand Meta aim pose controls travel direction.
+- Both hands must be tracked and closed as fists to move.
+- Travel direction is the tracked-space vector from the left fist to the right fist, transformed through the drone tracking root.
+- Opening either hand, losing either hand, or bringing the fists too close together stops the drone immediately.
 - Head orientation is not used for travel direction, so looking around does not steer.
 - No autopilot, target seeking, or collision avoidance is implemented.
 - Movement is continuous with configurable acceleration/deceleration.

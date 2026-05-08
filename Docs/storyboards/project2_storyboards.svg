@@ -20,23 +20,23 @@
   <text x="40" y="45" class="title">Project 2 Travel and Wayfinding Storyboards</text>
 
   <rect x="40" y="80" width="410" height="280" class="panel"/>
-  <text x="65" y="115" class="label">Travel 1: Point and Pinch</text>
+  <text x="65" y="115" class="label">Travel 1: Two-Fist Relative</text>
   <circle cx="110" cy="225" r="34" class="hand"/>
   <line x1="140" y1="220" x2="255" y2="170" class="arrow"/>
   <rect x="285" y="145" width="56" height="28" class="drone"/>
   <circle cx="275" cy="140" r="13" class="drone"/>
   <circle cx="351" cy="140" r="13" class="drone"/>
   <path d="M340 160 C365 150 390 130 410 105" class="path"/>
-  <text x="65" y="315" class="body">Right hand aims; left pinch controls speed.</text>
+  <text x="65" y="315" class="body">Right fist relative to left fist sets direction.</text>
 
   <rect x="495" y="80" width="410" height="280" class="panel"/>
-  <text x="520" y="115" class="label">Travel 2: Two-Hand Lever</text>
+  <text x="520" y="115" class="label">Travel 2: Point and Pinch</text>
   <circle cx="585" cy="220" r="30" class="hand"/>
   <circle cx="725" cy="220" r="30" class="hand"/>
   <line x1="610" y1="220" x2="700" y2="220" stroke="#2f3b45" stroke-width="10"/>
   <line x1="710" y1="205" x2="820" y2="155" class="arrow"/>
   <rect x="835" y="135" width="56" height="28" class="drone"/>
-  <text x="520" y="315" class="body">Viable, but both hands are occupied continuously.</text>
+  <text x="520" y="315" class="body">Viable, but hand aim can feel ambiguous.</text>
 
   <rect x="950" y="80" width="410" height="280" class="panel"/>
   <text x="975" y="115" class="label">Travel 3: Palm Tilt Joystick</text>
@@ -68,7 +68,7 @@
   <text x="975" y="645" class="body">Audio-only mode disables visual wayfinding aids.</text>
 
   <text x="40" y="760" class="title">Final Selected Design</text>
-  <text x="40" y="800" class="body">Travel: right-hand aim direction plus left-hand pinch throttle.</text>
+  <text x="40" y="800" class="body">Travel: two tracked fists; right fist relative to left fist sets flight direction.</text>
   <text x="40" y="830" class="body">Wayfinding: world-space line/arrow, head-space HUD indicator, optional spatial audio pulse.</text>
   <text x="40" y="860" class="body">Motion mitigation: first-person, cockpit, and third-person camera modes switchable by hand gesture.</text>
 </svg>

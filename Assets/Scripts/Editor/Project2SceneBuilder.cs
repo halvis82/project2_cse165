@@ -290,7 +290,6 @@ public static class Project2SceneBuilder
         mainCamera.clearFlags = CameraClearFlags.Skybox;
         mainCameraObject.AddComponent<AudioListener>();
         mainCameraObject.AddComponent<HmdPoseDriver>();
-        input.SetSteeringReference(mainCameraObject.transform);
 
         var droneVisual = CreateDroneVisual(droneRoot.transform, droneMaterial, accentMaterial);
         var cockpitVisual = CreateCockpitVisual(viewAnchor, cockpitMaterial, droneMaterial, accentMaterial);

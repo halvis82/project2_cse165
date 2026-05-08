@@ -1,23 +1,20 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.XR;
 using UnityEngine.XR.Hands;
 
 public sealed class HandGestureFlightInput : MonoBehaviour
 {
     [Header("Flight")]
     [SerializeField] private Transform trackingToWorldRoot;
-    [SerializeField] private Transform steeringReference;
     [SerializeField] private float pinchClosedDistanceMeters = 0.025f;
     [SerializeField] private float pinchOpenDistanceMeters = 0.12f;
-    [SerializeField] private float rightHandNeutralBelowHeadMeters = 0.35f;
-    [SerializeField] private float verticalDeadZoneMeters = 0.12f;
-    [SerializeField] private float verticalFullRangeMeters = 0.75f;
-    [SerializeField] private float verticalDirectionWeight = 1.15f;
+    [SerializeField] private float relativeHandDeadZoneMeters = 0.1f;
+    [SerializeField] private float fistFlightThrottle = 0.9f;
+    [SerializeField] private float directionSmoothingSharpness = 18f;
 
     [Header("Gestures")]
-    [SerializeField] private float fistStopThreshold = 0.72f;
+    [SerializeField] private float fistClosedThreshold = 0.72f;
     [SerializeField] private float fistPalmDistanceMeters = 0.115f;
     [SerializeField] private float viewSwitchHoldSeconds = 0.75f;
     [SerializeField] private float gestureCooldownSeconds = 0.8f;
@@ -94,18 +91,8 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         trackingToWorldRoot = root;
     }
 
-    public void SetSteeringReference(Transform reference)
-    {
-        steeringReference = reference;
-    }
-
     private void Awake()
     {
-        if (steeringReference == null && Camera.main != null)
-        {
-            steeringReference = Camera.main.transform;
-        }
-
         if (GetComponent<XRHandModelVisualizer>() == null)
         {
             gameObject.AddComponent<XRHandModelVisualizer>();
@@ -130,15 +117,10 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         var hasHandSubsystem = EnsureSubsystem();
         UsingEditorDebugInput = false;
 
-        var leftTracked = TryGetMetaPinch(MetaAimHand.left, out var leftPinch);
-        if (!leftTracked && hasHandSubsystem)
+        var leftGestureTracked = TryGetMetaPinch(MetaAimHand.left, out var leftPinch);
+        if (!leftGestureTracked && hasHandSubsystem)
         {
-            leftTracked = TryGetPinch(handSubsystem.leftHand, out leftPinch);
-        }
-
-        if (!leftTracked)
-        {
-            leftTracked = TryGetControllerThrottle(out leftPinch);
+            leftGestureTracked = TryGetPinch(handSubsystem.leftHand, out leftPinch);
         }
 
         var rightPinch = 0f;
@@ -151,21 +133,36 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             }
         }
 
-        var leftFistStop = TryGetLeftFistStop(hasHandSubsystem);
-        var rightHeightTracked = TryGetRightHandVerticalInput(hasHandSubsystem, out var verticalInput, out var verticalSource);
-        HandsTracked = leftTracked;
-        Throttle01 = leftTracked && !leftFistStop ? Mathf.Clamp01(leftPinch) : 0f;
-        ActiveInputSource = HandsTracked
-            ? leftFistStop ? "Fist brake" : rightHeightTracked ? $"Look + {verticalSource}" : "Look"
-            : "No input";
+        var leftTracked = TryGetFlightHand(
+            MetaAimHand.left,
+            hasHandSubsystem ? handSubsystem.leftHand : default,
+            hasHandSubsystem,
+            out var leftPosition,
+            out var leftFist);
+        var rightTracked = TryGetFlightHand(
+            MetaAimHand.right,
+            hasHandSubsystem ? handSubsystem.rightHand : default,
+            hasHandSubsystem,
+            out var rightPosition,
+            out var rightFist);
 
-        if (TryBuildSupermanMoveDirection(verticalInput, out var moveDirection))
+        HandsTracked = leftTracked && rightTracked;
+        Throttle01 = 0f;
+        HasUsableInput = false;
+        ActiveInputSource = HandsTracked ? "Open hand stop" : "No input";
+
+        if (HandsTracked &&
+            leftFist &&
+            rightFist &&
+            TryBuildRelativeHandMoveDirection(leftPosition, rightPosition, out var moveDirection))
         {
-            WorldMoveDirection = moveDirection;
+            WorldMoveDirection = SmoothDirection(WorldMoveDirection, moveDirection);
+            Throttle01 = Mathf.Clamp01(fistFlightThrottle);
+            HasUsableInput = Throttle01 > 0.04f;
+            ActiveInputSource = "Two-fist relative steering";
         }
 
-        HasUsableInput = HandsTracked && Throttle01 > 0.04f;
-        if (!leftFistStop)
+        if (leftGestureTracked)
         {
             UpdateModeGesture(leftPinch, rightPinch);
             if (hasHandSubsystem)
@@ -182,91 +179,86 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
     }
 
-    private bool TryBuildSupermanMoveDirection(float verticalInput, out Vector3 direction)
+    private bool TryBuildRelativeHandMoveDirection(Vector3 leftHandPosition, Vector3 rightHandPosition, out Vector3 direction)
     {
         direction = Vector3.forward;
 
-        var forward = steeringReference != null ? steeringReference.forward : Vector3.forward;
-        forward.y = 0f;
-        if (forward.sqrMagnitude < 0.001f)
-        {
-            forward = transform.forward;
-            forward.y = 0f;
-        }
-
-        if (forward.sqrMagnitude < 0.001f)
+        var trackingDirection = rightHandPosition - leftHandPosition;
+        if (trackingDirection.magnitude < relativeHandDeadZoneMeters)
         {
             return false;
         }
 
-        forward.Normalize();
-        direction = forward + Vector3.up * (verticalInput * verticalDirectionWeight);
+        direction = trackingToWorldRoot != null
+            ? trackingToWorldRoot.TransformDirection(trackingDirection)
+            : trackingDirection;
         if (direction.sqrMagnitude < 0.001f)
         {
-            direction = forward;
+            return false;
         }
 
         direction.Normalize();
         return true;
     }
 
-    private bool TryGetRightHandVerticalInput(bool hasHandSubsystem, out float verticalInput, out string source)
+    private Vector3 SmoothDirection(Vector3 currentDirection, Vector3 targetDirection)
     {
-        verticalInput = 0f;
-        source = "";
-
-        if (!TryGetRightHandPosition(hasHandSubsystem, out var handPosition, out source))
+        if (directionSmoothingSharpness <= 0f || currentDirection.sqrMagnitude < 0.001f)
         {
-            return false;
+            return targetDirection;
         }
 
-        var worldHandPosition = trackingToWorldRoot != null
-            ? trackingToWorldRoot.TransformPoint(handPosition)
-            : handPosition;
-        var referenceY = steeringReference != null ? steeringReference.position.y : transform.position.y + 1.45f;
-        var neutralY = referenceY - rightHandNeutralBelowHeadMeters;
-        var offset = worldHandPosition.y - neutralY;
-        var magnitude = Mathf.Abs(offset);
-        if (magnitude <= verticalDeadZoneMeters)
+        var t = 1f - Mathf.Exp(-directionSmoothingSharpness * Time.deltaTime);
+        return Vector3.Slerp(currentDirection.normalized, targetDirection, t).normalized;
+    }
+
+    private bool TryGetFlightHand(
+        MetaAimHand metaHand,
+        XRHand xrHand,
+        bool hasHandSubsystem,
+        out Vector3 position,
+        out bool fist)
+    {
+        position = Vector3.zero;
+        fist = false;
+
+        var metaPosition = Vector3.zero;
+        var xrPosition = Vector3.zero;
+        var hasMetaPose = HasValidMetaAimHand(metaHand) && TryGetMetaHandPosition(metaHand, out metaPosition);
+        var hasXrPose = hasHandSubsystem && TryGetJointPosition(xrHand, XRHandJointID.Palm, out xrPosition);
+
+        if (hasMetaPose || hasXrPose)
         {
-            verticalInput = 0f;
+            position = hasMetaPose ? metaPosition : xrPosition;
+            fist = (hasMetaPose && IsMetaFist(metaHand)) || (hasXrPose && IsXrFist(xrHand));
             return true;
         }
 
-        var range = Mathf.Max(verticalDeadZoneMeters + 0.01f, verticalFullRangeMeters);
-        verticalInput = Mathf.Sign(offset) * Mathf.InverseLerp(verticalDeadZoneMeters, range, magnitude);
-        verticalInput = Mathf.Clamp(verticalInput, -1f, 1f);
-        return true;
+        return false;
     }
 
-    private bool TryGetLeftFistStop(bool hasHandSubsystem)
+    private bool IsMetaFist(MetaAimHand hand)
     {
-        var left = MetaAimHand.left;
-        if (HasValidMetaAimHand(left))
-        {
-            var index = ReadMetaPinch(left, hand => hand.pinchStrengthIndex);
-            var middle = ReadMetaPinch(left, hand => hand.pinchStrengthMiddle);
-            var ring = ReadMetaPinch(left, hand => hand.pinchStrengthRing);
-            var little = ReadMetaPinch(left, hand => hand.pinchStrengthLittle);
-            if (index >= fistStopThreshold &&
-                middle >= fistStopThreshold &&
-                ring >= fistStopThreshold &&
-                little >= fistStopThreshold)
-            {
-                return true;
-            }
-        }
+        var index = ReadMetaPinch(hand, metaHand => metaHand.pinchStrengthIndex);
+        var middle = ReadMetaPinch(hand, metaHand => metaHand.pinchStrengthMiddle);
+        var ring = ReadMetaPinch(hand, metaHand => metaHand.pinchStrengthRing);
+        var little = ReadMetaPinch(hand, metaHand => metaHand.pinchStrengthLittle);
+        return index >= fistClosedThreshold &&
+               middle >= fistClosedThreshold &&
+               ring >= fistClosedThreshold &&
+               little >= fistClosedThreshold;
+    }
 
-        if (!hasHandSubsystem)
-        {
-            return false;
-        }
-
-        return TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.IndexTip, out var indexCurl) &&
-               TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.MiddleTip, out var middleCurl) &&
-               TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.RingTip, out var ringCurl) &&
-               TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.LittleTip, out var littleCurl) &&
-               indexCurl && middleCurl && ringCurl && littleCurl;
+    private bool IsXrFist(XRHand hand)
+    {
+        return TryGetFingerCurl(hand, XRHandJointID.IndexTip, out var indexCurl) &&
+               TryGetFingerCurl(hand, XRHandJointID.MiddleTip, out var middleCurl) &&
+               TryGetFingerCurl(hand, XRHandJointID.RingTip, out var ringCurl) &&
+               TryGetFingerCurl(hand, XRHandJointID.LittleTip, out var littleCurl) &&
+               indexCurl &&
+               middleCurl &&
+               ringCurl &&
+               littleCurl;
     }
 
     private bool TryGetFingerCurl(XRHand hand, XRHandJointID fingerTipId, out bool curled)
@@ -283,32 +275,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         return true;
     }
 
-    private bool TryGetRightHandPosition(bool hasHandSubsystem, out Vector3 position, out string source)
-    {
-        source = "";
-
-        if (TryGetMetaHandPosition(MetaAimHand.right, out position))
-        {
-            source = "right hand height";
-            return true;
-        }
-
-        if (TryGetControllerPosition(XRController.rightHand, out position))
-        {
-            source = "right controller height";
-            return true;
-        }
-
-        if (hasHandSubsystem && TryGetJointPosition(handSubsystem.rightHand, XRHandJointID.Palm, out position))
-        {
-            source = "right hand height";
-            return true;
-        }
-
-        position = Vector3.zero;
-        return false;
-    }
-
     private static bool TryGetMetaHandPosition(MetaAimHand hand, out Vector3 position)
     {
         position = Vector3.zero;
@@ -318,27 +284,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
 
         position = hand.devicePosition.ReadValue();
-        return true;
-    }
-
-    private static bool TryGetControllerPosition(XRController controller, out Vector3 position)
-    {
-        position = Vector3.zero;
-        if (controller == null || controller.devicePosition == null)
-        {
-            return false;
-        }
-
-        if (controller.trackingState != null)
-        {
-            var trackingState = controller.trackingState.ReadValue();
-            if ((trackingState & (int)UnityEngine.XR.InputTrackingState.Position) == 0)
-            {
-                return false;
-            }
-        }
-
-        position = controller.devicePosition.ReadValue();
         return true;
     }
 
@@ -353,24 +298,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         position = pose.position;
         return true;
-    }
-
-    private static bool TryGetControllerThrottle(out float throttle01)
-    {
-        throttle01 = 0f;
-
-        var leftController = XRController.leftHand;
-        if (leftController == null)
-        {
-            return false;
-        }
-
-        var trigger = leftController.TryGetChildControl<UnityEngine.InputSystem.Controls.AxisControl>("trigger");
-        var grip = leftController.TryGetChildControl<UnityEngine.InputSystem.Controls.AxisControl>("grip");
-        var triggerValue = trigger != null ? trigger.ReadValue() : 0f;
-        var gripValue = grip != null ? grip.ReadValue() : 0f;
-        throttle01 = Mathf.Clamp01(Mathf.Max(triggerValue, gripValue));
-        return throttle01 > 0.01f;
     }
 
     private static bool TryGetMetaPinch(MetaAimHand hand, out float pinch01)

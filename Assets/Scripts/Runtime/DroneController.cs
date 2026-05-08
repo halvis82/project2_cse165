@@ -4,11 +4,12 @@ using UnityEngine;
 public sealed class DroneController : MonoBehaviour
 {
     [SerializeField] private HandGestureFlightInput handInput;
-    [SerializeField] private float maxSpeedMetersPerSecond = 14f;
+    [SerializeField] private float maxSpeedMetersPerSecond = 35f;
     [SerializeField] private float accelerationMetersPerSecondSquared = 8f;
     [SerializeField] private float decelerationMetersPerSecondSquared = 18f;
     [SerializeField] private float rotationResponsiveness = 8f;
     [SerializeField] private bool rotateRigWithMovement = false;
+    [SerializeField] private bool stopImmediatelyWithoutInput = true;
 
     private Rigidbody body;
     private float currentSpeedMetersPerSecond;
@@ -33,6 +34,13 @@ public sealed class DroneController : MonoBehaviour
     {
         if (!ControlsEnabled || handInput == null || !handInput.HasUsableInput)
         {
+            if (stopImmediatelyWithoutInput)
+            {
+                currentSpeedMetersPerSecond = 0f;
+                CurrentSpeedMetersPerSecond = 0f;
+                return;
+            }
+
             currentSpeedMetersPerSecond = Mathf.MoveTowards(
                 currentSpeedMetersPerSecond,
                 0f,

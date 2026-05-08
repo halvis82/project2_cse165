@@ -3726,7 +3726,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   handInput: {fileID: 1839864210}
   maxSpeedMetersPerSecond: 35
+  accelerationMetersPerSecondSquared: 8
+  decelerationMetersPerSecondSquared: 18
   rotationResponsiveness: 8
+  rotateRigWithMovement: 0
+  stopImmediatelyWithoutInput: 1
 --- !u!114 &1839864210
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3742,7 +3746,11 @@ MonoBehaviour:
   trackingToWorldRoot: {fileID: 1839864211}
   pinchClosedDistanceMeters: 0.025
   pinchOpenDistanceMeters: 0.12
-  steeringDeadZone: 0.08
+  relativeHandDeadZoneMeters: 0.1
+  fistFlightThrottle: 0.9
+  directionSmoothingSharpness: 18
+  fistClosedThreshold: 0.72
+  fistPalmDistanceMeters: 0.115
   viewSwitchHoldSeconds: 0.75
   gestureCooldownSeconds: 0.8
   enableEditorDebugFlight: 1

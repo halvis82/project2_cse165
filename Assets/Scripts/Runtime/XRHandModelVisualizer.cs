@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem.XR;
 using UnityEngine.XR.Hands;
 
 public sealed class XRHandModelVisualizer : MonoBehaviour
@@ -74,16 +73,6 @@ public sealed class XRHandModelVisualizer : MonoBehaviour
         var hasHandSubsystem = EnsureSubsystem();
         var leftRendered = hasHandSubsystem && leftHand.TryUpdateFromHand(handSubsystem.leftHand);
         var rightRendered = hasHandSubsystem && rightHand.TryUpdateFromHand(handSubsystem.rightHand);
-
-        if (!leftRendered)
-        {
-            leftRendered = leftHand.TryUpdateFromController(XRController.leftHand);
-        }
-
-        if (!rightRendered)
-        {
-            rightRendered = rightHand.TryUpdateFromController(XRController.rightHand);
-        }
 
         leftHand.SetVisible(leftRendered);
         rightHand.SetVisible(rightRendered);
@@ -222,43 +211,6 @@ public sealed class XRHandModelVisualizer : MonoBehaviour
             }
 
             aimRay.gameObject.SetActive(false);
-            return true;
-        }
-
-        public bool TryUpdateFromController(XRController controller)
-        {
-            if (controller == null || controller.devicePosition == null || controller.deviceRotation == null)
-            {
-                return false;
-            }
-
-            if (controller.trackingState != null)
-            {
-                var trackingState = controller.trackingState.ReadValue();
-                var hasPosition = (trackingState & (int)UnityEngine.XR.InputTrackingState.Position) != 0;
-                var hasRotation = (trackingState & (int)UnityEngine.XR.InputTrackingState.Rotation) != 0;
-                if (!hasPosition || !hasRotation)
-                {
-                    return false;
-                }
-            }
-
-            var position = controller.devicePosition.ReadValue();
-            var rotation = controller.deviceRotation.ReadValue();
-
-            foreach (var jointObject in jointObjects.Values)
-            {
-                jointObject.gameObject.SetActive(false);
-            }
-
-            for (var i = 0; i < bones.Length; i++)
-            {
-                bones[i].positionCount = 0;
-            }
-
-            aimRay.gameObject.SetActive(true);
-            aimRay.localPosition = position + rotation * (Vector3.forward * 0.35f);
-            aimRay.localRotation = rotation * Quaternion.Euler(90f, 0f, 0f);
             return true;
         }
 

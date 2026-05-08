@@ -334,8 +334,8 @@ public sealed class RaceManager : MonoBehaviour
             else
             {
                 hud?.SetStatus(handInput != null && !handInput.HandsTracked
-                    ? "Left pinch/trigger to fly"
-                    : "Look steers. Right height climbs.");
+                    ? "Show both hands"
+                    : "Two fists steer. Open hand stops.");
             }
             statusClearAt = 0f;
         }

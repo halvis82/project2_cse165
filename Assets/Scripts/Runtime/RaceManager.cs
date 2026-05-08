@@ -16,7 +16,9 @@ public sealed class RaceManager : MonoBehaviour
     [SerializeField] private RaceAudio raceAudio;
     [SerializeField] private float startCountdownSeconds = 3f;
     [SerializeField] private float crashCountdownSeconds = 3f;
-    [SerializeField] private bool enableTrackEditor = true;
+    [SerializeField] private bool enableTrackEditor = false;
+    [SerializeField] private bool allowRuntimeTrackEditorGestures = false;
+    [SerializeField] private bool allowRuntimeTrackLoadingGestures = false;
     [SerializeField] private string savedTrackFolderName = "TrainingTracks";
     [SerializeField] private bool enableGhostChampion = true;
     [SerializeField] private float ghostSampleRateHz = 90f;
@@ -209,25 +211,53 @@ public sealed class RaceManager : MonoBehaviour
         if (handInput.TrackEditorToggleRequested)
         {
             handInput.ConsumeTrackEditorToggleRequest();
-            ToggleTrackEditorMode();
+            if (CanUseRuntimeTrackEditor())
+            {
+                ToggleTrackEditorMode();
+            }
+            else
+            {
+                SetStatus("Track editing locked");
+            }
         }
 
         if (handInput.TrackEditorAddCheckpointRequested)
         {
             handInput.ConsumeTrackEditorAddCheckpointRequest();
-            AddTrackEditorCheckpoint();
+            if (CanUseRuntimeTrackEditor())
+            {
+                AddTrackEditorCheckpoint();
+            }
+            else
+            {
+                SetStatus("Track editing locked");
+            }
         }
 
         if (handInput.TrackEditorSaveRequested)
         {
             handInput.ConsumeTrackEditorSaveRequest();
-            SaveEditedTrack();
+            if (CanUseRuntimeTrackEditor())
+            {
+                SaveEditedTrack();
+            }
+            else
+            {
+                SetStatus("Track editing locked");
+            }
         }
 
         if (handInput.TrackEditorLoadNextRequested)
         {
             handInput.ConsumeTrackEditorLoadNextRequest();
-            LoadNextSavedTrack();
+            if (CanUseRuntimeTrackLoading())
+            {
+                LoadNextSavedTrack();
+            }
+            else
+            {
+                SetStatus("Track loading locked");
+            }
         }
 
         if (handInput.AudioWayfindingToggleRequested)
@@ -319,6 +349,10 @@ public sealed class RaceManager : MonoBehaviour
         {
             hud?.SetSpeed(droneController.CurrentSpeedMetersPerSecond);
         }
+
+        hud?.SetInfoPanel(
+            GetSelectedStateText(),
+            BuildInfoPanelText());
     }
 
     private void StartCurrentTrackRace(string status, bool applyPreferredStartingView)
@@ -427,9 +461,9 @@ public sealed class RaceManager : MonoBehaviour
 
     private void ToggleTrackEditorMode()
     {
-        if (!enableTrackEditor)
+        if (!CanUseRuntimeTrackEditor())
         {
-            SetStatus("Track editor disabled");
+            SetStatus("Track editing locked");
             return;
         }
 
@@ -468,6 +502,12 @@ public sealed class RaceManager : MonoBehaviour
 
     private void AddTrackEditorCheckpoint()
     {
+        if (!CanUseRuntimeTrackEditor())
+        {
+            SetStatus("Track editing locked");
+            return;
+        }
+
         if (!trackEditorMode || checkpointTrack == null || droneController == null)
         {
             SetStatus("Enable track edit first");
@@ -489,6 +529,12 @@ public sealed class RaceManager : MonoBehaviour
 
     private void SaveEditedTrack()
     {
+        if (!CanUseRuntimeTrackEditor())
+        {
+            SetStatus("Track editing locked");
+            return;
+        }
+
         if (!trackEditorMode || checkpointTrack == null || checkpointTrack.Count < 2)
         {
             SetStatus("No edited track to save");
@@ -503,7 +549,13 @@ public sealed class RaceManager : MonoBehaviour
 
     private void LoadNextSavedTrack()
     {
-        if (!enableTrackEditor || checkpointTrack == null)
+        if (!CanUseRuntimeTrackLoading())
+        {
+            SetStatus("Track loading locked");
+            return;
+        }
+
+        if (checkpointTrack == null)
         {
             return;
         }
@@ -523,6 +575,16 @@ public sealed class RaceManager : MonoBehaviour
         }
 
         StartCurrentTrackRace($"Loaded {Path.GetFileNameWithoutExtension(files[savedTrackLoadIndex])}", false);
+    }
+
+    private bool CanUseRuntimeTrackEditor()
+    {
+        return enableTrackEditor && allowRuntimeTrackEditorGestures;
+    }
+
+    private bool CanUseRuntimeTrackLoading()
+    {
+        return enableTrackEditor && allowRuntimeTrackLoadingGestures;
     }
 
     private void ToggleAudioOnlyWayfinding()
@@ -549,6 +611,81 @@ public sealed class RaceManager : MonoBehaviour
         return Directory.Exists(folder)
             ? Directory.GetFiles(folder, "*.xyz").OrderBy(path => path).ToArray()
             : Array.Empty<string>();
+    }
+
+    private string GetSelectedStateText()
+    {
+        if (finished)
+        {
+            return "SELECTED: FINISHED";
+        }
+
+        if (trackEditorMode)
+        {
+            return "SELECTED: TRACK EDIT";
+        }
+
+        if (countdownRemaining > 0f)
+        {
+            return crashResetInProgress
+                ? $"SELECTED: RECOVER {Mathf.CeilToInt(countdownRemaining)}"
+                : $"SELECTED: START {Mathf.CeilToInt(countdownRemaining)}";
+        }
+
+        if (handInput != null && string.Equals(handInput.ActiveInputSource, "Fist brake", StringComparison.Ordinal))
+        {
+            return "SELECTED: STOPPED";
+        }
+
+        var speed = droneController != null ? droneController.CurrentSpeedMetersPerSecond : 0f;
+        return speed > 0.35f ? "SELECTED: MOVING" : "SELECTED: STOPPED";
+    }
+
+    private string BuildInfoPanelText()
+    {
+        var target = "Target: no active checkpoint";
+        if (HasCurrentTarget && droneController != null)
+        {
+            var distanceMeters = Vector3.Distance(droneController.transform.position, CurrentTargetPosition);
+            target = $"Target: CP {currentTargetIndex + 1}/{CheckpointCount}  {distanceMeters:0}m";
+        }
+
+        var input = handInput != null ? handInput.ActiveInputSource : "None";
+        var cameraMode = cameraRig != null ? cameraRig.CurrentMode.ToString() : "None";
+        var speed = droneController != null ? droneController.CurrentSpeedMetersPerSecond : 0f;
+
+        return
+            $"Track: {GetTrackSourceLabel()}\n" +
+            "Goal: pass CPs in order\n" +
+            $"{target}\n" +
+            $"Timer: count-up {elapsedSeconds:0.0}s\n" +
+            $"Speed: {speed:0.0} m/s\n" +
+            $"Wayfinding: {(audioOnlyWayfindingMode ? "AUDIO ONLY" : "VISUAL ON")}\n" +
+            $"Track edit: {GetTrackEditLabel()}\n" +
+            $"Camera: {cameraMode}\n" +
+            $"Input: {input}";
+    }
+
+    private string GetTrackEditLabel()
+    {
+        if (!CanUseRuntimeTrackEditor() && !CanUseRuntimeTrackLoading())
+        {
+            return "LOCKED";
+        }
+
+        return trackEditorMode ? "ON" : "OFF";
+    }
+
+    private string GetTrackSourceLabel()
+    {
+        if (checkpointTrack == null || string.IsNullOrWhiteSpace(checkpointTrack.LastLoadedSource))
+        {
+            return "none";
+        }
+
+        var source = checkpointTrack.LastLoadedSource;
+        var fileName = Path.GetFileName(source);
+        return string.IsNullOrWhiteSpace(fileName) ? source : fileName;
     }
 
     private void UpdateGhostRecording()

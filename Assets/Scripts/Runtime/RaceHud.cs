@@ -10,6 +10,13 @@ public sealed class RaceHud : MonoBehaviour
     [SerializeField] private Text arrowText;
     [SerializeField] private Text modeText;
     [SerializeField] private Text speedText;
+    [SerializeField] private Text selectedStateText;
+    [SerializeField] private Text infoPanelText;
+
+    private void Awake()
+    {
+        EnsureInfoPanel();
+    }
 
     public void SetReferences(
         Text timer,
@@ -103,6 +110,21 @@ public sealed class RaceHud : MonoBehaviour
         }
     }
 
+    public void SetInfoPanel(string selectedState, string details)
+    {
+        EnsureInfoPanel();
+
+        if (selectedStateText != null)
+        {
+            selectedStateText.text = selectedState;
+        }
+
+        if (infoPanelText != null)
+        {
+            infoPanelText.text = details;
+        }
+    }
+
     public void SetWayfindingVisible(bool visible)
     {
         if (targetText != null)
@@ -114,5 +136,92 @@ public sealed class RaceHud : MonoBehaviour
         {
             arrowText.gameObject.SetActive(visible);
         }
+    }
+
+    private void EnsureInfoPanel()
+    {
+        if (selectedStateText != null && infoPanelText != null)
+        {
+            return;
+        }
+
+        if (selectedStateText == null)
+        {
+            selectedStateText = CreateInfoText(
+                "Live Selected State",
+                new Vector2(358f, -18f),
+                new Vector2(330f, 34f),
+                20,
+                TextAnchor.UpperRight);
+
+            if (selectedStateText != null)
+            {
+                selectedStateText.color = Color.white;
+                var outline = selectedStateText.gameObject.AddComponent<Outline>();
+                outline.effectColor = new Color(1f, 0.88f, 0.05f, 1f);
+                outline.effectDistance = new Vector2(2f, -2f);
+            }
+        }
+
+        if (infoPanelText == null)
+        {
+            infoPanelText = CreateInfoText(
+                "Live Race Info",
+                new Vector2(358f, -52f),
+                new Vector2(360f, 155f),
+                13,
+                TextAnchor.UpperRight);
+
+            if (infoPanelText != null)
+            {
+                infoPanelText.color = Color.white;
+                var outline = infoPanelText.gameObject.AddComponent<Outline>();
+                outline.effectColor = new Color(0f, 0f, 0f, 0.75f);
+                outline.effectDistance = new Vector2(1f, -1f);
+            }
+        }
+    }
+
+    private Text CreateInfoText(string objectName, Vector2 anchoredPosition, Vector2 size, int fontSize, TextAnchor alignment)
+    {
+        var rectTransform = transform as RectTransform;
+        if (rectTransform == null)
+        {
+            return null;
+        }
+
+        var textObject = new GameObject(objectName, typeof(RectTransform));
+        textObject.transform.SetParent(transform, false);
+
+        var childRect = textObject.GetComponent<RectTransform>();
+        childRect.anchorMin = new Vector2(1f, 1f);
+        childRect.anchorMax = new Vector2(1f, 1f);
+        childRect.pivot = new Vector2(1f, 1f);
+        childRect.anchoredPosition = anchoredPosition;
+        childRect.sizeDelta = size;
+
+        var text = textObject.AddComponent<Text>();
+        text.font = ResolveFont();
+        text.fontSize = fontSize;
+        text.alignment = alignment;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        text.raycastTarget = false;
+        return text;
+    }
+
+    private Font ResolveFont()
+    {
+        if (timerText != null && timerText.font != null)
+        {
+            return timerText.font;
+        }
+
+        if (statusText != null && statusText.font != null)
+        {
+            return statusText.font;
+        }
+
+        return Resources.GetBuiltinResource<Font>("Arial.ttf");
     }
 }

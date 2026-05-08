@@ -5,6 +5,7 @@ public sealed class RaceHud : MonoBehaviour
 {
     [SerializeField] private Text timerText;
     [SerializeField] private Text countdownText;
+    [SerializeField] private Text restartWarningText;
     [SerializeField] private Text statusText;
     [SerializeField] private Text targetText;
     [SerializeField] private Text arrowText;
@@ -17,6 +18,7 @@ public sealed class RaceHud : MonoBehaviour
     private void Awake()
     {
         EnsureInfoPanel();
+        EnsureRestartWarningText();
     }
 
     public void SetReferences(
@@ -65,6 +67,19 @@ public sealed class RaceHud : MonoBehaviour
         }
 
         countdownText.text = Mathf.CeilToInt(remainingSeconds).ToString();
+    }
+
+    public void SetRestartWarning(string message)
+    {
+        EnsureRestartWarningText();
+        if (restartWarningText == null)
+        {
+            return;
+        }
+
+        var visible = !string.IsNullOrWhiteSpace(message);
+        restartWarningText.gameObject.SetActive(visible);
+        restartWarningText.text = visible ? message : string.Empty;
     }
 
     public void SetStatus(string message)
@@ -212,6 +227,44 @@ public sealed class RaceHud : MonoBehaviour
                 outline.effectDistance = new Vector2(1f, -1f);
             }
         }
+    }
+
+    private void EnsureRestartWarningText()
+    {
+        if (restartWarningText != null)
+        {
+            return;
+        }
+
+        var rectTransform = transform as RectTransform;
+        if (rectTransform == null)
+        {
+            return;
+        }
+
+        var textObject = new GameObject("Restart Warning", typeof(RectTransform));
+        textObject.transform.SetParent(transform, false);
+        var childRect = textObject.GetComponent<RectTransform>();
+        childRect.anchorMin = new Vector2(0.5f, 0.5f);
+        childRect.anchorMax = new Vector2(0.5f, 0.5f);
+        childRect.pivot = new Vector2(0.5f, 0.5f);
+        childRect.anchoredPosition = new Vector2(0f, -6f);
+        childRect.sizeDelta = new Vector2(620f, 94f);
+
+        restartWarningText = textObject.AddComponent<Text>();
+        restartWarningText.font = ResolveFont();
+        restartWarningText.fontSize = 42;
+        restartWarningText.alignment = TextAnchor.MiddleCenter;
+        restartWarningText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        restartWarningText.verticalOverflow = VerticalWrapMode.Overflow;
+        restartWarningText.raycastTarget = false;
+        restartWarningText.color = new Color(1f, 0.9f, 0.25f, 1f);
+
+        var outline = restartWarningText.gameObject.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.9f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        restartWarningText.gameObject.SetActive(false);
     }
 
     private Text CreateInfoText(string objectName, Vector2 anchoredPosition, Vector2 size, int fontSize, TextAnchor alignment, bool anchorRight)

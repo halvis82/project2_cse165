@@ -16,8 +16,8 @@ public sealed class RaceManager : MonoBehaviour
     [SerializeField] private float startCountdownSeconds = 3f;
     [SerializeField] private float restartCountdownSeconds = 5f;
     [SerializeField] private float crashCountdownSeconds = 3f;
-    [SerializeField] private float activeRaceRestartHoldSeconds = 10f;
-    [SerializeField] private float restartWarningSeconds = 5f;
+    [SerializeField] private float activeRaceRestartHoldSeconds = 8f;
+    [SerializeField] private float restartWarningSeconds = 4f;
     [SerializeField] private float finishRestartHoldSeconds = 0.9f;
     [SerializeField] private bool enableGhostChampion = true;
     [SerializeField] private float ghostSampleRateHz = 90f;
@@ -214,7 +214,6 @@ public sealed class RaceManager : MonoBehaviour
         {
             handInput.ConsumeRestartRaceRequest();
             if (!restartInProgress &&
-                (finished || (timerRunning && countdownRemaining <= 0f)) &&
                 checkpointTrack != null &&
                 checkpointTrack.Count >= 2)
             {
@@ -226,7 +225,7 @@ public sealed class RaceManager : MonoBehaviour
             }
         }
 
-        TryRestartFinishedFromFlatHandsHold();
+        TryRestartFromFlatHandsHold();
 
         if (handInput.AudioWayfindingToggleRequested)
         {
@@ -242,14 +241,15 @@ public sealed class RaceManager : MonoBehaviour
         }
     }
 
-    private void TryRestartFinishedFromFlatHandsHold()
+    private void TryRestartFromFlatHandsHold()
     {
-        if (restartInProgress || !finished || handInput == null || checkpointTrack == null || checkpointTrack.Count < 2)
+        if (restartInProgress || handInput == null || checkpointTrack == null || checkpointTrack.Count < 2)
         {
             return;
         }
 
-        if (handInput.BothHandsFlatHoldSeconds >= finishRestartHoldSeconds)
+        var requiredHold = finished ? finishRestartHoldSeconds : activeRaceRestartHoldSeconds;
+        if (handInput.BothHandsFlatHoldSeconds >= requiredHold)
         {
             RestartCurrentRace();
         }
@@ -303,6 +303,7 @@ public sealed class RaceManager : MonoBehaviour
     {
         hud?.SetTimer(elapsedSeconds, finished);
         hud?.SetCountdown(countdownRemaining);
+        hud?.SetRestartWarning(BuildRestartWarningText());
 
         if (Time.time > statusClearAt && statusClearAt > 0f && !finished && countdownRemaining <= 0f)
         {
@@ -578,21 +579,6 @@ public sealed class RaceManager : MonoBehaviour
                 : "GET READY\nControls locked\nTimer is 0\nMove after countdown";
         }
 
-        if (handInput != null)
-        {
-            var restartHold = handInput.BothHandsFlatHoldSeconds;
-            var warningStart = Mathf.Max(0f, activeRaceRestartHoldSeconds - restartWarningSeconds);
-            if (restartHold >= warningStart)
-            {
-                var remaining = Mathf.Max(0f, activeRaceRestartHoldSeconds - restartHold);
-                return
-                    "RESTART HOLD\n" +
-                    $"Restart in {Mathf.CeilToInt(remaining)}\n" +
-                    "Keep both hands flat\n" +
-                    "Move a hand to cancel";
-            }
-        }
-
         return
             "CONTROLS\n" +
             "Left flat/open: stop\n" +
@@ -601,9 +587,32 @@ public sealed class RaceManager : MonoBehaviour
             "Right flat/open: 70 m/s\n" +
             "Right relative to left: direction\n" +
             "Both index pinch hold: view\n" +
-            "Both flat 10s: restart\n" +
+            $"Both flat {Mathf.CeilToInt(activeRaceRestartHoldSeconds)}s: restart\n" +
             "Left little pinch: audio nav\n" +
             "Right little pinch: ghost";
+    }
+
+    private string BuildRestartWarningText()
+    {
+        if (finished ||
+            countdownRemaining > 0f ||
+            restartInProgress ||
+            handInput == null ||
+            checkpointTrack == null ||
+            checkpointTrack.Count < 2)
+        {
+            return string.Empty;
+        }
+
+        var warningStart = Mathf.Max(0f, activeRaceRestartHoldSeconds - restartWarningSeconds);
+        var restartHold = handInput.BothHandsFlatHoldSeconds;
+        if (restartHold < warningStart)
+        {
+            return string.Empty;
+        }
+
+        var remaining = Mathf.Max(0f, activeRaceRestartHoldSeconds - restartHold);
+        return $"Restarting in {Mathf.CeilToInt(remaining)}";
     }
 
     private string GetTrackSourceLabel()

@@ -19,7 +19,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float fistClosedThreshold = 0.72f;
     [SerializeField] private float fistPalmDistanceMeters = 0.115f;
     [SerializeField] private float viewSwitchHoldSeconds = 0.75f;
-    [SerializeField] private float restartHoldSeconds = 10f;
+    [SerializeField] private float restartHoldSeconds = 8f;
     [SerializeField] private float gestureCooldownSeconds = 0.8f;
 
     [Header("Editor Debug")]

@@ -993,6 +993,11 @@ MonoBehaviour:
   motorMaxVolume: 0.42
   motorMinPitch: 0.55
   motorMaxPitch: 2.15
+  waypointAudibleRangeMeters: 120
+  waypointMinVolume: 0.02
+  waypointMaxVolume: 0.65
+  waypointMinPitch: 0.75
+  waypointMaxPitch: 1.75
 --- !u!82 &539562147
 AudioSource:
   m_ObjectHideFlags: 0
@@ -1482,6 +1487,9 @@ MonoBehaviour:
   startCountdownSeconds: 3
   restartCountdownSeconds: 5
   crashCountdownSeconds: 3
+  activeRaceRestartHoldSeconds: 10
+  restartWarningSeconds: 5
+  finishRestartHoldSeconds: 0.9
 --- !u!114 &632637958
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3759,7 +3767,7 @@ MonoBehaviour:
   fistClosedThreshold: 0.72
   fistPalmDistanceMeters: 0.115
   viewSwitchHoldSeconds: 0.75
-  restartHoldSeconds: 0.9
+  restartHoldSeconds: 10
   gestureCooldownSeconds: 0.8
   enableEditorDebugFlight: 1
   editorDebugCruiseThrottle: 0.55

@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-This project implements a Meta Quest hand-tracked drone navigation trainer at Machu Picchu. The operator flies through ordered checkpoints using hand tracking only, with visual and audio wayfinding, crash recovery, motion-sickness mitigation views, and extra-credit systems for track editing, audio-only waypoint navigation, and ghost champion racing.
+This project implements a Meta Quest hand-tracked drone navigation trainer at Machu Picchu. The operator flies through ordered checkpoints using hand tracking only, with visual and audio wayfinding, crash recovery, motion-sickness mitigation views, and extra-credit systems for audio-only waypoint navigation and ghost champion racing.
 
 ## Selected Interaction Design
 
@@ -38,7 +38,7 @@ The HUD displays current checkpoint number, distance, and heading arrow. This wa
 
 ### Wayfinding 3: Spatial Audio Pulse
 
-The active waypoint emits a spatialized pulse. This was selected as extra credit and as an alternate wayfinding condition when visual aids are disabled.
+The active waypoint emits a spatialized pulse that gets louder and faster as the drone approaches. This was selected as extra credit and as an alternate wayfinding condition when visual aids are disabled.
 
 ## Heuristic Evaluation
 
@@ -46,11 +46,11 @@ The active waypoint emits a spatialized pulse. This was selected as extra credit
 | --- | --- | --- | --- |
 | Visibility of system status | Mostly satisfied. Countdown, timer, speed, checkpoint index, status text, and view mode are visible. | 0 | Keep status messages short so they do not distract during racing. |
 | Match between system and real world | Mostly satisfied. Two-handed steering and spatial waypoint audio map naturally to drone piloting and navigation. | 0 | In demo narration, explicitly describe the left fist as the anchor and the right fist as the direction handle. |
-| User control and freedom | Mostly satisfied. User can stop by opening either hand, switch views, toggle audio-only mode, and reset through crash recovery. | 1 | Add an explicit restart gesture in a future version if time allows. |
+| User control and freedom | Mostly satisfied. User can stop by opening either hand, switch views, toggle audio-only mode, restart by holding both hands flat, and recover after crashes. | 0 | Keep the restart hold long enough to prevent accidental resets. |
 | Consistency and standards | Mostly satisfied. Checkpoints use stable colors and ordered numbering; HUD uses conventional timer/speed displays. | 0 | Keep all demo terminology consistent: checkpoint, waypoint, race, crash reset. |
 | Error prevention | Partially satisfied. No autopilot or collision avoidance is allowed, but crash recovery prevents unrecoverable states. | 1 | Keep visible checkpoint spheres enabled even in audio-only mode, as allowed by the writeup. |
-| Recognition rather than recall | Mostly satisfied. HUD and world arrows reduce memory burden; status text names editor/test actions. | 1 | For final demo, show the gesture list briefly before headset footage. |
-| Flexibility and efficiency of use | Satisfied. Editor keyboard fallback supports development only; Quest uses hand gestures. Track editor and saved tracks support advanced users. | 0 | Avoid relying on keyboard fallback in submitted demo. |
+| Recognition rather than recall | Mostly satisfied. HUD and world arrows reduce memory burden; status text names the active control and restart warning. | 1 | For final demo, show the gesture list briefly before headset footage. |
+| Flexibility and efficiency of use | Satisfied. Editor keyboard fallback supports development only; Quest uses hand gestures for movement, view switching, restart, audio-only wayfinding, and ghost visibility. | 0 | Avoid relying on keyboard fallback in submitted demo. |
 | Aesthetic and minimalist design | Mostly satisfied. HUD is compact and wayfinding aids are simple. | 0 | If visual clutter appears in video, use audio-only mode to demonstrate alternate navigation. |
 | Help users recognize, diagnose, recover from errors | Mostly satisfied. Crash status and countdown make recovery obvious; invalid tracks log errors/warnings. | 1 | In demo, intentionally crash once to show recovery behavior. |
 | Help and documentation | Partially satisfied. Implementation checklist and this document explain features. | 1 | Include the public GitHub URL and demo video URL in the final submission message. |
@@ -61,7 +61,7 @@ Pilot view without drone visuals is fastest and least visually cluttered, but it
 
 ## Runtime Help
 
-The HUD includes a controls panel under the timer, plus a race state panel on the right. After finishing, the HUD prompts the operator to hold both hands flat/open to restart. Restarting resets the stopwatch to 0 and starts a 5-second countdown before controls are re-enabled.
+The HUD includes a controls panel under the timer, plus a race state panel on the right. After finishing, the HUD prompts the operator to hold both hands flat/open to reload the current XYZ track source and restart. During an active race, holding both hands flat/open for 10 seconds also restarts, with a visible warning during the last 5 seconds. Restarting resets the stopwatch to 0 and starts a 5-second countdown before controls are re-enabled.
 
 ## Implementation Checklist
 

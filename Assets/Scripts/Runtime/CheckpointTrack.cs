@@ -164,26 +164,13 @@ public sealed class CheckpointTrack : MonoBehaviour
         }
     }
 
-    public void SetRuntimePositions(IEnumerable<Vector3> newPositions, string source)
+    private void SetRuntimePositions(IEnumerable<Vector3> newPositions, string source)
     {
         positions.Clear();
         positions.AddRange(newPositions.Take(MaxCheckpointCount));
         LastLoadedSource = source;
         Debug.Log($"Loaded {positions.Count} checkpoints from {source}.");
         RebuildVisuals();
-    }
-
-    public bool AppendRuntimeCheckpoint(Vector3 position)
-    {
-        if (positions.Count >= MaxCheckpointCount)
-        {
-            Debug.LogWarning($"Ignoring checkpoint. Track is already at the {MaxCheckpointCount} checkpoint limit.");
-            return false;
-        }
-
-        positions.Add(position);
-        RebuildVisuals();
-        return true;
     }
 
     public bool TryLoadXyzFile(string path)
@@ -210,23 +197,6 @@ public sealed class CheckpointTrack : MonoBehaviour
         return true;
     }
 
-    public void SaveCurrentTrackToXyz(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path));
-        var lines = positions.Select(position =>
-        {
-            var inches = position / XyzTrackParser.InchesToMeters;
-            return string.Format(
-                System.Globalization.CultureInfo.InvariantCulture,
-                "{0:0.###} {1:0.###} {2:0.###}",
-                inches.x,
-                inches.y,
-                inches.z);
-        });
-
-        File.WriteAllLines(path, lines);
-        Debug.Log($"Saved {positions.Count} checkpoints to {path}.");
-    }
 
     private string TryReadCompetitionTrack(out string source)
     {

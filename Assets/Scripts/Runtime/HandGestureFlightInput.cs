@@ -19,7 +19,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float fistClosedThreshold = 0.72f;
     [SerializeField] private float fistPalmDistanceMeters = 0.115f;
     [SerializeField] private float viewSwitchHoldSeconds = 0.75f;
-    [SerializeField] private float restartHoldSeconds = 0.9f;
+    [SerializeField] private float restartHoldSeconds = 10f;
     [SerializeField] private float gestureCooldownSeconds = 0.8f;
 
     [Header("Editor Debug")]
@@ -35,10 +35,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     private float gestureCooldown;
     private bool viewModeCycleRequested;
     private bool restartRaceRequested;
-    private bool trackEditorToggleRequested;
-    private bool trackEditorAddCheckpointRequested;
-    private bool trackEditorSaveRequested;
-    private bool trackEditorLoadNextRequested;
     private bool audioWayfindingToggleRequested;
     private bool ghostChampionToggleRequested;
 
@@ -49,13 +45,10 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     public bool HasUsableInput { get; private set; }
     public bool ViewModeCycleRequested => viewModeCycleRequested;
     public bool RestartRaceRequested => restartRaceRequested;
-    public bool TrackEditorToggleRequested => trackEditorToggleRequested;
-    public bool TrackEditorAddCheckpointRequested => trackEditorAddCheckpointRequested;
-    public bool TrackEditorSaveRequested => trackEditorSaveRequested;
-    public bool TrackEditorLoadNextRequested => trackEditorLoadNextRequested;
     public bool AudioWayfindingToggleRequested => audioWayfindingToggleRequested;
     public bool GhostChampionToggleRequested => ghostChampionToggleRequested;
     public bool UsingEditorDebugInput { get; private set; }
+    public float BothHandsFlatHoldSeconds => restartHold;
     public string ActiveInputSource { get; private set; } = "None";
 
     public void ConsumeViewModeCycleRequest()
@@ -66,26 +59,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     public void ConsumeRestartRaceRequest()
     {
         restartRaceRequested = false;
-    }
-
-    public void ConsumeTrackEditorToggleRequest()
-    {
-        trackEditorToggleRequested = false;
-    }
-
-    public void ConsumeTrackEditorAddCheckpointRequest()
-    {
-        trackEditorAddCheckpointRequested = false;
-    }
-
-    public void ConsumeTrackEditorSaveRequest()
-    {
-        trackEditorSaveRequested = false;
-    }
-
-    public void ConsumeTrackEditorLoadNextRequest()
-    {
-        trackEditorLoadNextRequested = false;
     }
 
     public void ConsumeAudioWayfindingToggleRequest()
@@ -115,10 +88,6 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     {
         viewModeCycleRequested = false;
         restartRaceRequested = false;
-        trackEditorToggleRequested = false;
-        trackEditorAddCheckpointRequested = false;
-        trackEditorSaveRequested = false;
-        trackEditorLoadNextRequested = false;
         audioWayfindingToggleRequested = false;
         ghostChampionToggleRequested = false;
 
@@ -443,30 +412,10 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         var left = MetaAimHand.left;
         var right = MetaAimHand.right;
-        var rightMiddle = ReadGesturePinch(right, handSubsystem.rightHand, hand => hand.pinchStrengthMiddle, XRHandJointID.MiddleTip) > 0.85f;
-        var rightRing = ReadGesturePinch(right, handSubsystem.rightHand, hand => hand.pinchStrengthRing, XRHandJointID.RingTip) > 0.85f;
         var rightLittle = ReadGesturePinch(right, handSubsystem.rightHand, hand => hand.pinchStrengthLittle, XRHandJointID.LittleTip) > 0.85f;
-        var leftMiddle = ReadGesturePinch(left, handSubsystem.leftHand, hand => hand.pinchStrengthMiddle, XRHandJointID.MiddleTip) > 0.85f;
-        var leftRing = ReadGesturePinch(left, handSubsystem.leftHand, hand => hand.pinchStrengthRing, XRHandJointID.RingTip) > 0.85f;
         var leftLittle = ReadGesturePinch(left, handSubsystem.leftHand, hand => hand.pinchStrengthLittle, XRHandJointID.LittleTip) > 0.85f;
 
-        if (rightRing)
-        {
-            trackEditorToggleRequested = true;
-        }
-        else if (rightMiddle)
-        {
-            trackEditorAddCheckpointRequested = true;
-        }
-        else if (leftMiddle)
-        {
-            trackEditorSaveRequested = true;
-        }
-        else if (leftRing)
-        {
-            trackEditorLoadNextRequested = true;
-        }
-        else if (leftLittle)
+        if (leftLittle)
         {
             audioWayfindingToggleRequested = true;
         }
@@ -607,24 +556,9 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             viewModeCycleRequested = true;
             gestureCooldown = gestureCooldownSeconds;
         }
-        else if (keyboard.tKey.wasPressedThisFrame)
+        else if (keyboard.rKey.wasPressedThisFrame)
         {
-            trackEditorToggleRequested = true;
-            gestureCooldown = gestureCooldownSeconds;
-        }
-        else if (keyboard.vKey.wasPressedThisFrame)
-        {
-            trackEditorAddCheckpointRequested = true;
-            gestureCooldown = gestureCooldownSeconds;
-        }
-        else if (keyboard.bKey.wasPressedThisFrame)
-        {
-            trackEditorSaveRequested = true;
-            gestureCooldown = gestureCooldownSeconds;
-        }
-        else if (keyboard.nKey.wasPressedThisFrame)
-        {
-            trackEditorLoadNextRequested = true;
+            restartRaceRequested = true;
             gestureCooldown = gestureCooldownSeconds;
         }
         else if (keyboard.xKey.wasPressedThisFrame)

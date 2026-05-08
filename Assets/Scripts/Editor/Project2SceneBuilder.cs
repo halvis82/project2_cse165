@@ -23,6 +23,8 @@ public static class Project2SceneBuilder
     private const string SampleTrackPath = "Assets/Tracks/sample_track.xyz";
     private const string CheckpointPrefabPath = "Assets/Checkpoint.prefab";
     private const string MaterialFolder = "Assets/Materials";
+    private const string QuestPackageName = "edu.ucsd.cse165.project2.dronewayfinding";
+    private const string QuestUnityActivity = "com.unity3d.player.UnityPlayerActivity";
     private const float InchesToMeters = 1f / 39.37f;
     private const int MaxCheckpointCount = 100;
 
@@ -137,6 +139,49 @@ public static class Project2SceneBuilder
         Debug.Log($"Imported competition track: {sourcePath} -> Assets/StreamingAssets/competition.xyz");
     }
 
+    [MenuItem("CSE165 Project 2/Install Competition XYZ To Connected Quest...")]
+    public static void InstallCompetitionXyzToQuest()
+    {
+        var sourcePath = EditorUtility.OpenFilePanel("Install Competition XYZ To Quest", "", "xyz");
+        if (string.IsNullOrWhiteSpace(sourcePath))
+        {
+            return;
+        }
+
+        var content = File.ReadAllText(sourcePath);
+        var checkpoints = XyzTrackParser.Parse(content);
+        if (checkpoints.Count < 2)
+        {
+            Debug.LogError($"Competition track needs at least 2 valid checkpoints: {sourcePath}");
+            return;
+        }
+
+        if (checkpoints.Count > MaxCheckpointCount)
+        {
+            Debug.LogWarning($"Competition track has {checkpoints.Count} checkpoints. Runtime will use the first {MaxCheckpointCount}.");
+        }
+
+        var adb = FindAdbPath();
+        var questFolder = $"/sdcard/Android/data/{QuestPackageName}/files";
+        if (!RunAdb(adb, $"shell mkdir -p {questFolder}", out var mkdirOutput))
+        {
+            Debug.LogError($"Could not create Quest track folder.\n{mkdirOutput}");
+            return;
+        }
+
+        if (!RunAdb(adb, $"push {QuoteForProcess(sourcePath)} {questFolder}/competition.xyz", out var pushOutput))
+        {
+            Debug.LogError($"Could not install competition track to Quest.\n{pushOutput}");
+            return;
+        }
+
+        RunAdb(adb, $"shell am force-stop {QuestPackageName}", out _);
+        var launched = RunAdb(adb, $"shell am start -n {QuestPackageName}/{QuestUnityActivity}", out var launchOutput);
+        Debug.Log(
+            $"Installed competition track to Quest persistent data: {sourcePath}\n{pushOutput}" +
+            (launched ? $"\nRelaunched app so the track loads immediately.\n{launchOutput}" : $"\nTrack installed, but app relaunch failed.\n{launchOutput}"));
+    }
+
     [MenuItem("CSE165 Project 2/Clear Competition XYZ")]
     public static void ClearCompetitionXyz()
     {
@@ -200,6 +245,53 @@ public static class Project2SceneBuilder
         }
 
         File.WriteAllText(manifestPath, builder.ToString());
+    }
+
+    private static string FindAdbPath()
+    {
+        var sdkAdb = Path.Combine(AndroidExternalToolsSettings.sdkRootPath ?? "", "platform-tools/adb");
+        if (File.Exists(sdkAdb))
+        {
+            return sdkAdb;
+        }
+
+        var userAdb = Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+            "Downloads/platform-tools/adb");
+        return File.Exists(userAdb) ? userAdb : "adb";
+    }
+
+    private static bool RunAdb(string adbPath, string arguments, out string output)
+    {
+        var startInfo = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = adbPath,
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using (var process = System.Diagnostics.Process.Start(startInfo))
+        {
+            if (process == null)
+            {
+                output = "Failed to start adb.";
+                return false;
+            }
+
+            var stdout = process.StandardOutput.ReadToEnd();
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            output = stdout + stderr;
+            return process.ExitCode == 0;
+        }
+    }
+
+    private static string QuoteForProcess(string path)
+    {
+        return "\"" + path.Replace("\"", "\\\"") + "\"";
     }
 
     [MenuItem("CSE165 Project 2/Snap Drone To Checkpoint 01")]

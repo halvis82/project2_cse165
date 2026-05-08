@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using UnityEngine;
 
 public sealed class RaceManager : MonoBehaviour
@@ -17,10 +16,9 @@ public sealed class RaceManager : MonoBehaviour
     [SerializeField] private float startCountdownSeconds = 3f;
     [SerializeField] private float restartCountdownSeconds = 5f;
     [SerializeField] private float crashCountdownSeconds = 3f;
-    [SerializeField] private bool enableTrackEditor = false;
-    [SerializeField] private bool allowRuntimeTrackEditorGestures = false;
-    [SerializeField] private bool allowRuntimeTrackLoadingGestures = false;
-    [SerializeField] private string savedTrackFolderName = "TrainingTracks";
+    [SerializeField] private float activeRaceRestartHoldSeconds = 10f;
+    [SerializeField] private float restartWarningSeconds = 5f;
+    [SerializeField] private float finishRestartHoldSeconds = 0.9f;
     [SerializeField] private bool enableGhostChampion = true;
     [SerializeField] private float ghostSampleRateHz = 90f;
     [SerializeField] private float checkpointSweepTeleportThresholdMeters = 45f;
@@ -33,10 +31,9 @@ public sealed class RaceManager : MonoBehaviour
     private bool timerRunning;
     private bool finished;
     private bool crashResetInProgress;
-    private bool trackEditorMode;
+    private bool restartInProgress;
     private bool audioOnlyWayfindingMode;
     private bool ghostChampionVisible = true;
-    private int savedTrackLoadIndex = -1;
     private float nextGhostSampleTime;
     private float lastGhostPoseTime;
     private Vector3 lastGhostPosePosition;
@@ -133,6 +130,7 @@ public sealed class RaceManager : MonoBehaviour
     private void SetupFailed()
     {
         SetStatus("Track needs at least 2 checkpoints.");
+        raceAudio?.StopWaypoint();
         if (droneController != null)
         {
             droneController.ControlsEnabled = false;
@@ -141,16 +139,19 @@ public sealed class RaceManager : MonoBehaviour
 
     public void HandleCrash()
     {
-        if (trackEditorMode || finished || crashResetInProgress)
+        if (finished || crashResetInProgress)
         {
             return;
         }
 
         crashResetInProgress = true;
+        restartInProgress = false;
         raceAudio?.PlayCrash();
-        SetStatus($"Crash +{Mathf.CeilToInt(Mathf.Max(3f, crashCountdownSeconds))}s");
+        var penaltySeconds = Mathf.Max(3f, crashCountdownSeconds);
+        elapsedSeconds += penaltySeconds;
+        SetStatus($"Crash +{Mathf.CeilToInt(penaltySeconds)}s");
         PlaceDroneAtCheckpoint(lastClearedIndex);
-        StartCountdown(crashCountdownSeconds, timerRunning, "Recover");
+        StartCountdown(penaltySeconds, false, "Recover");
     }
 
     private void UpdateCountdown()
@@ -175,10 +176,10 @@ public sealed class RaceManager : MonoBehaviour
 
             if (droneController != null && !finished)
             {
-                droneController.ControlsEnabled = !trackEditorMode;
+                droneController.ControlsEnabled = true;
             }
 
-            if (!timerRunning && !finished && !trackEditorMode)
+            if (!timerRunning && !finished)
             {
                 timerRunning = true;
             }
@@ -212,7 +213,10 @@ public sealed class RaceManager : MonoBehaviour
         if (handInput.RestartRaceRequested)
         {
             handInput.ConsumeRestartRaceRequest();
-            if (finished && checkpointTrack != null && checkpointTrack.Count >= 2)
+            if (!restartInProgress &&
+                (finished || (timerRunning && countdownRemaining <= 0f)) &&
+                checkpointTrack != null &&
+                checkpointTrack.Count >= 2)
             {
                 RestartCurrentRace();
             }
@@ -222,57 +226,7 @@ public sealed class RaceManager : MonoBehaviour
             }
         }
 
-        if (handInput.TrackEditorToggleRequested)
-        {
-            handInput.ConsumeTrackEditorToggleRequest();
-            if (CanUseRuntimeTrackEditor())
-            {
-                ToggleTrackEditorMode();
-            }
-            else
-            {
-                SetStatus("Track editing locked");
-            }
-        }
-
-        if (handInput.TrackEditorAddCheckpointRequested)
-        {
-            handInput.ConsumeTrackEditorAddCheckpointRequest();
-            if (CanUseRuntimeTrackEditor())
-            {
-                AddTrackEditorCheckpoint();
-            }
-            else
-            {
-                SetStatus("Track editing locked");
-            }
-        }
-
-        if (handInput.TrackEditorSaveRequested)
-        {
-            handInput.ConsumeTrackEditorSaveRequest();
-            if (CanUseRuntimeTrackEditor())
-            {
-                SaveEditedTrack();
-            }
-            else
-            {
-                SetStatus("Track editing locked");
-            }
-        }
-
-        if (handInput.TrackEditorLoadNextRequested)
-        {
-            handInput.ConsumeTrackEditorLoadNextRequest();
-            if (CanUseRuntimeTrackLoading())
-            {
-                LoadNextSavedTrack();
-            }
-            else
-            {
-                SetStatus("Track loading locked");
-            }
-        }
+        TryRestartFinishedFromFlatHandsHold();
 
         if (handInput.AudioWayfindingToggleRequested)
         {
@@ -288,10 +242,22 @@ public sealed class RaceManager : MonoBehaviour
         }
     }
 
+    private void TryRestartFinishedFromFlatHandsHold()
+    {
+        if (restartInProgress || !finished || handInput == null || checkpointTrack == null || checkpointTrack.Count < 2)
+        {
+            return;
+        }
+
+        if (handInput.BothHandsFlatHoldSeconds >= finishRestartHoldSeconds)
+        {
+            RestartCurrentRace();
+        }
+    }
+
     private void UpdateCheckpointProgress()
     {
-        if (trackEditorMode ||
-            finished ||
+        if (finished ||
             countdownRemaining > 0f ||
             checkpointTrack == null ||
             checkpointTrack.Count < 2 ||
@@ -320,6 +286,7 @@ public sealed class RaceManager : MonoBehaviour
             timerRunning = false;
             droneController.ControlsEnabled = false;
             checkpointTrack.SetCurrentIndex(checkpointTrack.Count);
+            raceAudio?.StopWaypoint();
             raceAudio?.PlayFinish();
             var newBest = FinishGhostRecording();
             SetStatus(newBest ? "New best. Both flat: restart" : "Finished. Both flat: restart");
@@ -376,13 +343,13 @@ public sealed class RaceManager : MonoBehaviour
             return;
         }
 
-        trackEditorMode = false;
         currentTargetIndex = 1;
         lastClearedIndex = 0;
         elapsedSeconds = 0f;
         timerRunning = false;
         finished = false;
         crashResetInProgress = false;
+        restartInProgress = false;
         audioOnlyWayfindingMode = false;
 
         PlaceDroneAtCheckpoint(lastClearedIndex);
@@ -400,6 +367,30 @@ public sealed class RaceManager : MonoBehaviour
 
     private void RestartCurrentRace()
     {
+        restartInProgress = true;
+        StopAllCoroutines();
+        StartCoroutine(RestartCurrentRaceRoutine());
+    }
+
+    private System.Collections.IEnumerator RestartCurrentRaceRoutine()
+    {
+        if (checkpointTrack == null)
+        {
+            restartInProgress = false;
+            SetupFailed();
+            yield break;
+        }
+
+        var loaded = false;
+        yield return checkpointTrack.LoadTrackAsync(success => loaded = success);
+
+        if (!loaded || checkpointTrack.Count < 2)
+        {
+            restartInProgress = false;
+            SetupFailed();
+            yield break;
+        }
+
         StartCurrentTrackRace("Restart", true, restartCountdownSeconds);
     }
 
@@ -411,13 +402,13 @@ public sealed class RaceManager : MonoBehaviour
             return;
         }
 
-        trackEditorMode = false;
         currentTargetIndex = 1;
         lastClearedIndex = 0;
         elapsedSeconds = 0f;
         timerRunning = false;
         finished = false;
         crashResetInProgress = false;
+        restartInProgress = false;
         audioOnlyWayfindingMode = false;
 
         PlaceDroneAtCheckpoint(lastClearedIndex);
@@ -507,134 +498,6 @@ public sealed class RaceManager : MonoBehaviour
         return Vector3.Distance(point, segmentStart + segment * t);
     }
 
-    private void ToggleTrackEditorMode()
-    {
-        if (!CanUseRuntimeTrackEditor())
-        {
-            SetStatus("Track editing locked");
-            return;
-        }
-
-        trackEditorMode = !trackEditorMode;
-        if (trackEditorMode && checkpointTrack != null && droneController != null)
-        {
-            checkpointTrack.SetRuntimePositions(new[] { droneController.transform.position }, "new hand-edited track");
-            currentTargetIndex = 0;
-            lastClearedIndex = 0;
-            countdownRemaining = 0f;
-            timerRunning = false;
-            finished = false;
-            crashResetInProgress = false;
-            ResetGhostRecordingState(false);
-            droneController.ControlsEnabled = true;
-        }
-        else if (!trackEditorMode)
-        {
-            if (checkpointTrack != null && checkpointTrack.Count >= 2)
-            {
-                StartCurrentTrackRace("Edited track ready", false);
-            }
-            else if (droneController != null)
-            {
-                droneController.ControlsEnabled = false;
-                SetStatus("Track edit needs 2 checkpoints.");
-            }
-
-            return;
-        }
-
-        SetStatus(trackEditorMode
-            ? "Track edit: CP1 placed. R middle adds."
-            : "Track edit off");
-    }
-
-    private void AddTrackEditorCheckpoint()
-    {
-        if (!CanUseRuntimeTrackEditor())
-        {
-            SetStatus("Track editing locked");
-            return;
-        }
-
-        if (!trackEditorMode || checkpointTrack == null || droneController == null)
-        {
-            SetStatus("Enable track edit first");
-            return;
-        }
-
-        if (!checkpointTrack.AppendRuntimeCheckpoint(droneController.transform.position))
-        {
-            SetStatus($"Track limit: {CheckpointTrack.MaxCheckpointCount}");
-            return;
-        }
-
-        currentTargetIndex = checkpointTrack.Count > 1
-            ? Mathf.Clamp(currentTargetIndex, 1, checkpointTrack.Count - 1)
-            : 0;
-        checkpointTrack.SetCurrentIndex(currentTargetIndex);
-        SetStatus($"Added checkpoint {checkpointTrack.Count}");
-    }
-
-    private void SaveEditedTrack()
-    {
-        if (!CanUseRuntimeTrackEditor())
-        {
-            SetStatus("Track editing locked");
-            return;
-        }
-
-        if (!trackEditorMode || checkpointTrack == null || checkpointTrack.Count < 2)
-        {
-            SetStatus("No edited track to save");
-            return;
-        }
-
-        var folder = GetSavedTrackFolder();
-        var path = Path.Combine(folder, $"track_{DateTime.Now:yyyyMMdd_HHmmss}.xyz");
-        checkpointTrack.SaveCurrentTrackToXyz(path);
-        SetStatus($"Saved track {Path.GetFileNameWithoutExtension(path)}");
-    }
-
-    private void LoadNextSavedTrack()
-    {
-        if (!CanUseRuntimeTrackLoading())
-        {
-            SetStatus("Track loading locked");
-            return;
-        }
-
-        if (checkpointTrack == null)
-        {
-            return;
-        }
-
-        var files = GetSavedTrackFiles();
-        if (files.Length == 0)
-        {
-            SetStatus("No saved tracks");
-            return;
-        }
-
-        savedTrackLoadIndex = (savedTrackLoadIndex + 1) % files.Length;
-        if (!checkpointTrack.TryLoadXyzFile(files[savedTrackLoadIndex]))
-        {
-            SetStatus("Saved track failed");
-            return;
-        }
-
-        StartCurrentTrackRace($"Loaded {Path.GetFileNameWithoutExtension(files[savedTrackLoadIndex])}", false);
-    }
-
-    private bool CanUseRuntimeTrackEditor()
-    {
-        return enableTrackEditor && allowRuntimeTrackEditorGestures;
-    }
-
-    private bool CanUseRuntimeTrackLoading()
-    {
-        return enableTrackEditor && allowRuntimeTrackLoadingGestures;
-    }
-
     private void ToggleAudioOnlyWayfinding()
     {
         audioOnlyWayfindingMode = !audioOnlyWayfindingMode;
@@ -648,29 +511,11 @@ public sealed class RaceManager : MonoBehaviour
         hud?.SetWayfindingVisible(visible);
     }
 
-    private string GetSavedTrackFolder()
-    {
-        return Path.Combine(Application.persistentDataPath, savedTrackFolderName);
-    }
-
-    private string[] GetSavedTrackFiles()
-    {
-        var folder = GetSavedTrackFolder();
-        return Directory.Exists(folder)
-            ? Directory.GetFiles(folder, "*.xyz").OrderBy(path => path).ToArray()
-            : Array.Empty<string>();
-    }
-
     private string GetSelectedStateText()
     {
         if (finished)
         {
             return "SELECTED: FINISHED";
-        }
-
-        if (trackEditorMode)
-        {
-            return "SELECTED: TRACK EDIT";
         }
 
         if (countdownRemaining > 0f)
@@ -711,7 +556,6 @@ public sealed class RaceManager : MonoBehaviour
             $"Speed: {speed:0.0} m/s\n" +
             $"Hand gap: {handGap:0.00}m\n" +
             $"Wayfinding: {(audioOnlyWayfindingMode ? "AUDIO ONLY" : "VISUAL ON")}\n" +
-            $"Track edit: {GetTrackEditLabel()}\n" +
             $"Camera: {cameraMode}\n" +
             $"Input: {input}";
     }
@@ -730,8 +574,23 @@ public sealed class RaceManager : MonoBehaviour
         if (countdownRemaining > 0f)
         {
             return crashResetInProgress
-                ? "CRASH RECOVERY\nControls locked\nTimer keeps running\nWait for countdown"
+                ? "CRASH RECOVERY\nControls locked\n+3s penalty applied\nTimer resumes after countdown"
                 : "GET READY\nControls locked\nTimer is 0\nMove after countdown";
+        }
+
+        if (handInput != null)
+        {
+            var restartHold = handInput.BothHandsFlatHoldSeconds;
+            var warningStart = Mathf.Max(0f, activeRaceRestartHoldSeconds - restartWarningSeconds);
+            if (restartHold >= warningStart)
+            {
+                var remaining = Mathf.Max(0f, activeRaceRestartHoldSeconds - restartHold);
+                return
+                    "RESTART HOLD\n" +
+                    $"Restart in {Mathf.CeilToInt(remaining)}\n" +
+                    "Keep both hands flat\n" +
+                    "Move a hand to cancel";
+            }
         }
 
         return
@@ -742,18 +601,9 @@ public sealed class RaceManager : MonoBehaviour
             "Right flat/open: 70 m/s\n" +
             "Right relative to left: direction\n" +
             "Both index pinch hold: view\n" +
+            "Both flat 10s: restart\n" +
             "Left little pinch: audio nav\n" +
             "Right little pinch: ghost";
-    }
-
-    private string GetTrackEditLabel()
-    {
-        if (!CanUseRuntimeTrackEditor() && !CanUseRuntimeTrackLoading())
-        {
-            return "LOCKED";
-        }
-
-        return trackEditorMode ? "ON" : "OFF";
     }
 
     private string GetTrackSourceLabel()

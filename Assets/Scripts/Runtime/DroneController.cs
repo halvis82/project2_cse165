@@ -4,8 +4,8 @@ using UnityEngine;
 public sealed class DroneController : MonoBehaviour
 {
     [SerializeField] private HandGestureFlightInput handInput;
-    [SerializeField] private float maxSpeedMetersPerSecond = 35f;
-    [SerializeField] private float accelerationMetersPerSecondSquared = 8f;
+    [SerializeField] private float maxSpeedMetersPerSecond = 70f;
+    [SerializeField] private float accelerationMetersPerSecondSquared = 120f;
     [SerializeField] private float decelerationMetersPerSecondSquared = 18f;
     [SerializeField] private float rotationResponsiveness = 8f;
     [SerializeField] private bool rotateRigWithMovement = false;

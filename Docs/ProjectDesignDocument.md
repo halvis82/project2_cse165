@@ -6,7 +6,7 @@ This project implements a Meta Quest hand-tracked drone navigation trainer at Ma
 
 ## Selected Interaction Design
 
-The final travel technique uses a two-fist relative vector: both hands must be tracked and closed, and the vector from the left fist to the right fist becomes the flight direction. Opening either hand, losing tracking, or holding the fists too close together stops the drone immediately. The user can look around independently because head orientation is not used for steering.
+The final travel technique uses a left-hand safety gate with right-hand speed modes. Both hands must be tracked, and opening the left hand stops the drone immediately. With the left hand closed as a fist, the vector from the left hand to the right hand becomes the flight direction. A right-hand fist gives variable speed based on hand separation; a right-hand flat/open pose gives a constant 70 m/s boost. The user can look around independently because head orientation is not used for steering.
 
 The final wayfinding technique combines world-space aids and head-space aids. In normal mode, the user sees checkpoint spheres, a world line/arrow toward the next checkpoint, and HUD target distance/heading. In audio-only extra-credit mode, visual wayfinding is disabled except checkpoint display, and a spatialized pulse emits from the active waypoint.
 
@@ -16,7 +16,7 @@ The final wayfinding technique combines world-space aids and head-space aids. In
 
 ### Travel 1: Two-Fist Relative Flight
 
-The user closes both hands into fists. The left fist acts as an anchor, and the right fist's position relative to it controls direction: right fist left of the left fist moves left, right fist forward of the left fist moves forward, and vertical offsets climb or descend. Opening either hand stops immediately. This was selected because it satisfies the no-head-steering requirement and prevents drift when tracking is uncertain.
+The user closes the left hand into a fist as a safety gate. The right hand's position relative to the left hand controls direction: right hand left of the left hand moves left, right hand forward of the left hand moves forward, and vertical offsets climb or descend. A right fist gives variable speed from hand separation, while a right flat/open pose gives a constant 70 m/s boost. Opening the left hand stops immediately. This was selected because it satisfies the no-head-steering requirement and prevents drift when tracking is uncertain.
 
 ### Travel 2: Point-and-Pinch Flight
 
@@ -54,6 +54,14 @@ The active waypoint emits a spatialized pulse. This was selected as extra credit
 | Aesthetic and minimalist design | Mostly satisfied. HUD is compact and wayfinding aids are simple. | 0 | If visual clutter appears in video, use audio-only mode to demonstrate alternate navigation. |
 | Help users recognize, diagnose, recover from errors | Mostly satisfied. Crash status and countdown make recovery obvious; invalid tracks log errors/warnings. | 1 | In demo, intentionally crash once to show recovery behavior. |
 | Help and documentation | Partially satisfied. Implementation checklist and this document explain features. | 1 | Include the public GitHub URL and demo video URL in the final submission message. |
+
+## Motion Sickness Observation
+
+Pilot view without drone visuals is fastest and least visually cluttered, but it gives the fewest body-fixed cues. Cockpit view is the most stable because the cockpit frame stays visible while the user looks around. Third-person view makes the drone's motion easiest to understand, but it can feel less natural during tight turns because the camera follows behind the drone.
+
+## Runtime Help
+
+The HUD includes a controls panel under the timer, plus a race state panel on the right. After finishing, the HUD prompts the operator to hold both hands flat/open to restart. Restarting resets the stopwatch to 0 and starts a 5-second countdown before controls are re-enabled.
 
 ## Implementation Checklist
 

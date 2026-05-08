@@ -15,6 +15,7 @@ public sealed class RaceManager : MonoBehaviour
     [SerializeField] private WayfindingSystem wayfindingSystem;
     [SerializeField] private RaceAudio raceAudio;
     [SerializeField] private float startCountdownSeconds = 3f;
+    [SerializeField] private float restartCountdownSeconds = 5f;
     [SerializeField] private float crashCountdownSeconds = 3f;
     [SerializeField] private bool enableTrackEditor = false;
     [SerializeField] private bool allowRuntimeTrackEditorGestures = false;
@@ -147,7 +148,7 @@ public sealed class RaceManager : MonoBehaviour
 
         crashResetInProgress = true;
         raceAudio?.PlayCrash();
-        SetStatus("Crash reset");
+        SetStatus($"Crash +{Mathf.CeilToInt(Mathf.Max(3f, crashCountdownSeconds))}s");
         PlaceDroneAtCheckpoint(lastClearedIndex);
         StartCountdown(crashCountdownSeconds, timerRunning, "Recover");
     }
@@ -206,6 +207,19 @@ public sealed class RaceManager : MonoBehaviour
             handInput.ConsumeViewModeCycleRequest();
             cameraRig?.CycleMode();
             hud?.SetViewMode(cameraRig != null ? cameraRig.CurrentMode : DroneViewMode.FirstPerson);
+        }
+
+        if (handInput.RestartRaceRequested)
+        {
+            handInput.ConsumeRestartRaceRequest();
+            if (finished && checkpointTrack != null && checkpointTrack.Count >= 2)
+            {
+                RestartCurrentRace();
+            }
+            else if (finished)
+            {
+                BeginRaceSetup();
+            }
         }
 
         if (handInput.TrackEditorToggleRequested)
@@ -307,10 +321,8 @@ public sealed class RaceManager : MonoBehaviour
             droneController.ControlsEnabled = false;
             checkpointTrack.SetCurrentIndex(checkpointTrack.Count);
             raceAudio?.PlayFinish();
-            if (!FinishGhostRecording())
-            {
-                SetStatus("Finished");
-            }
+            var newBest = FinishGhostRecording();
+            SetStatus(newBest ? "New best. Both flat: restart" : "Finished. Both flat: restart");
             return;
         }
 
@@ -335,7 +347,7 @@ public sealed class RaceManager : MonoBehaviour
             {
                 hud?.SetStatus(handInput != null && !handInput.HandsTracked
                     ? "Show both hands"
-                    : "Two fists steer. Open hand stops.");
+                    : "Fist gap controls speed.");
             }
             statusClearAt = 0f;
         }
@@ -353,6 +365,7 @@ public sealed class RaceManager : MonoBehaviour
         hud?.SetInfoPanel(
             GetSelectedStateText(),
             BuildInfoPanelText());
+        hud?.SetControlsPanel(BuildControlsPanelText());
     }
 
     private void StartCurrentTrackRace(string status, bool applyPreferredStartingView)
@@ -383,6 +396,41 @@ public sealed class RaceManager : MonoBehaviour
         raceAudio?.SetWaypoint(CurrentTargetPosition);
         ResetGhostRecordingState(true);
         StartCountdown(startCountdownSeconds, false, status);
+    }
+
+    private void RestartCurrentRace()
+    {
+        StartCurrentTrackRace("Restart", true, restartCountdownSeconds);
+    }
+
+    private void StartCurrentTrackRace(string status, bool applyPreferredStartingView, float countdownSeconds)
+    {
+        if (checkpointTrack == null || checkpointTrack.Count < 2 || droneController == null)
+        {
+            SetupFailed();
+            return;
+        }
+
+        trackEditorMode = false;
+        currentTargetIndex = 1;
+        lastClearedIndex = 0;
+        elapsedSeconds = 0f;
+        timerRunning = false;
+        finished = false;
+        crashResetInProgress = false;
+        audioOnlyWayfindingMode = false;
+
+        PlaceDroneAtCheckpoint(lastClearedIndex);
+        checkpointTrack.SetCurrentIndex(currentTargetIndex);
+        SetVisualWayfinding(true);
+        if (applyPreferredStartingView)
+        {
+            ApplyPreferredStartingView();
+        }
+
+        raceAudio?.SetWaypoint(CurrentTargetPosition);
+        ResetGhostRecordingState(true);
+        StartCountdown(countdownSeconds, false, status);
     }
 
     private void StartCountdown(float seconds, bool keepTimerRunning, string status)
@@ -628,11 +676,11 @@ public sealed class RaceManager : MonoBehaviour
         if (countdownRemaining > 0f)
         {
             return crashResetInProgress
-                ? $"SELECTED: RECOVER {Mathf.CeilToInt(countdownRemaining)}"
+                ? $"SELECTED: CRASH +{Mathf.CeilToInt(countdownRemaining)}"
                 : $"SELECTED: START {Mathf.CeilToInt(countdownRemaining)}";
         }
 
-        if (handInput != null && string.Equals(handInput.ActiveInputSource, "Fist brake", StringComparison.Ordinal))
+        if (handInput != null && string.Equals(handInput.ActiveInputSource, "Open hand stop", StringComparison.Ordinal))
         {
             return "SELECTED: STOPPED";
         }
@@ -653,6 +701,7 @@ public sealed class RaceManager : MonoBehaviour
         var input = handInput != null ? handInput.ActiveInputSource : "None";
         var cameraMode = cameraRig != null ? cameraRig.CurrentMode.ToString() : "None";
         var speed = droneController != null ? droneController.CurrentSpeedMetersPerSecond : 0f;
+        var handGap = handInput != null ? handInput.HandSeparationMeters : 0f;
 
         return
             $"Track: {GetTrackSourceLabel()}\n" +
@@ -660,10 +709,41 @@ public sealed class RaceManager : MonoBehaviour
             $"{target}\n" +
             $"Timer: count-up {elapsedSeconds:0.0}s\n" +
             $"Speed: {speed:0.0} m/s\n" +
+            $"Hand gap: {handGap:0.00}m\n" +
             $"Wayfinding: {(audioOnlyWayfindingMode ? "AUDIO ONLY" : "VISUAL ON")}\n" +
             $"Track edit: {GetTrackEditLabel()}\n" +
             $"Camera: {cameraMode}\n" +
             $"Input: {input}";
+    }
+
+    private string BuildControlsPanelText()
+    {
+        if (finished)
+        {
+            return
+                "FINISHED\n" +
+                "Both hands flat: restart\n" +
+                "Restart has 5s countdown\n" +
+                "Timer resets before countdown";
+        }
+
+        if (countdownRemaining > 0f)
+        {
+            return crashResetInProgress
+                ? "CRASH RECOVERY\nControls locked\nTimer keeps running\nWait for countdown"
+                : "GET READY\nControls locked\nTimer is 0\nMove after countdown";
+        }
+
+        return
+            "CONTROLS\n" +
+            "Left flat/open: stop\n" +
+            "Left fist: arm flight\n" +
+            "Right fist: variable speed\n" +
+            "Right flat/open: 70 m/s\n" +
+            "Right relative to left: direction\n" +
+            "Both index pinch hold: view\n" +
+            "Left little pinch: audio nav\n" +
+            "Right little pinch: ghost";
     }
 
     private string GetTrackEditLabel()

@@ -27,7 +27,7 @@
   <circle cx="275" cy="140" r="13" class="drone"/>
   <circle cx="351" cy="140" r="13" class="drone"/>
   <path d="M340 160 C365 150 390 130 410 105" class="path"/>
-  <text x="65" y="315" class="body">Right fist relative to left fist sets direction.</text>
+  <text x="65" y="315" class="body">Direction from fists; wider gap increases speed.</text>
 
   <rect x="495" y="80" width="410" height="280" class="panel"/>
   <text x="520" y="115" class="label">Travel 2: Point and Pinch</text>
@@ -68,7 +68,7 @@
   <text x="975" y="645" class="body">Audio-only mode disables visual wayfinding aids.</text>
 
   <text x="40" y="760" class="title">Final Selected Design</text>
-  <text x="40" y="800" class="body">Travel: two tracked fists; right fist relative to left fist sets flight direction.</text>
+  <text x="40" y="800" class="body">Travel: two tracked fists; relative direction steers and separation controls speed.</text>
   <text x="40" y="830" class="body">Wayfinding: world-space line/arrow, head-space HUD indicator, optional spatial audio pulse.</text>
   <text x="40" y="860" class="body">Motion mitigation: first-person, cockpit, and third-person camera modes switchable by hand gesture.</text>
 </svg>

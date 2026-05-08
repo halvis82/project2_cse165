@@ -988,7 +988,11 @@ MonoBehaviour:
   motorSource: {fileID: 539562148}
   effectsSource: {fileID: 539562147}
   waypointSource: {fileID: 546651268}
-  maxSpeedForPitch: 35
+  maxSpeedForPitch: 70
+  motorMinVolume: 0.07
+  motorMaxVolume: 0.42
+  motorMinPitch: 0.55
+  motorMaxPitch: 2.15
 --- !u!82 &539562147
 AudioSource:
   m_ObjectHideFlags: 0
@@ -1476,6 +1480,7 @@ MonoBehaviour:
   wayfindingSystem: {fileID: 632637956}
   raceAudio: {fileID: 539562146}
   startCountdownSeconds: 3
+  restartCountdownSeconds: 5
   crashCountdownSeconds: 3
 --- !u!114 &632637958
 MonoBehaviour:
@@ -3725,8 +3730,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   handInput: {fileID: 1839864210}
-  maxSpeedMetersPerSecond: 35
-  accelerationMetersPerSecondSquared: 8
+  maxSpeedMetersPerSecond: 70
+  accelerationMetersPerSecondSquared: 120
   decelerationMetersPerSecondSquared: 18
   rotationResponsiveness: 8
   rotateRigWithMovement: 0
@@ -3747,11 +3752,14 @@ MonoBehaviour:
   pinchClosedDistanceMeters: 0.025
   pinchOpenDistanceMeters: 0.12
   relativeHandDeadZoneMeters: 0.1
-  fistFlightThrottle: 0.9
+  fullSpeedHandSeparationMeters: 0.65
+  minimumFlightThrottle: 0.53
+  speedResponseExponent: 1.25
   directionSmoothingSharpness: 18
   fistClosedThreshold: 0.72
   fistPalmDistanceMeters: 0.115
   viewSwitchHoldSeconds: 0.75
+  restartHoldSeconds: 0.9
   gestureCooldownSeconds: 0.8
   enableEditorDebugFlight: 1
   editorDebugCruiseThrottle: 0.55

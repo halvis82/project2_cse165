@@ -21,9 +21,11 @@
 ### 2. Flight Controls
 
 - Quest build flight uses hand tracking only.
-- Both hands must be tracked and closed as fists to move.
-- Travel direction is the tracked-space vector from the left fist to the right fist, transformed through the drone tracking root.
-- Opening either hand, losing either hand, or bringing the fists too close together stops the drone immediately.
+- Both hands must be tracked, and the left hand must be closed as a fist to move.
+- Opening the left hand or losing either hand stops the drone immediately.
+- Travel direction is the tracked-space vector from the left hand to the right hand, transformed through the drone tracking root.
+- With the right hand closed as a fist, travel speed scales with hand separation.
+- With the right hand open/flat, travel speed is a constant 70 m/s boost.
 - Head orientation is not used for travel direction, so looking around does not steer.
 - No autopilot, target seeking, or collision avoidance is implemented.
 - Movement is continuous with configurable acceleration/deceleration.
@@ -48,9 +50,11 @@
 - Checkpoints must be reached in order.
 - Current, pending, and cleared checkpoints have different visual states.
 - Finish stops controls and leaves final time visible.
+- Finished state shows restart instructions; holding both hands flat/open restarts the race.
+- Restart uses a 5-second countdown with controls locked and the stopwatch reset to 0.
 - Terrain collision resets to the last cleared checkpoint.
-- Crash recovery countdown is always at least 3 seconds.
-- Lap timer continues during crash recovery.
+- Crash recovery countdown is always at least 3 seconds and is shown as the crash penalty.
+- Lap timer continues during crash recovery, so the recovery lockout is included in the final time.
 
 ## Extra Credit Implemented
 
@@ -67,7 +71,7 @@ The assignment caps implementation extra credit at 10 points. The code implement
 
 ### Audio Effects - 2 points
 
-- Motor loop pitch and volume respond to speed.
+- Procedural motor loop pitch and volume respond to speed.
 - Countdown, checkpoint, crash, and finish effects are generated and played.
 
 ### Spatialized Audio Wayfinding - 3 points

@@ -10,13 +10,16 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float pinchClosedDistanceMeters = 0.025f;
     [SerializeField] private float pinchOpenDistanceMeters = 0.12f;
     [SerializeField] private float relativeHandDeadZoneMeters = 0.1f;
-    [SerializeField] private float fistFlightThrottle = 0.9f;
+    [SerializeField] private float fullSpeedHandSeparationMeters = 0.65f;
+    [SerializeField] private float minimumFlightThrottle = 0.53f;
+    [SerializeField] private float speedResponseExponent = 1.25f;
     [SerializeField] private float directionSmoothingSharpness = 18f;
 
     [Header("Gestures")]
     [SerializeField] private float fistClosedThreshold = 0.72f;
     [SerializeField] private float fistPalmDistanceMeters = 0.115f;
     [SerializeField] private float viewSwitchHoldSeconds = 0.75f;
+    [SerializeField] private float restartHoldSeconds = 0.9f;
     [SerializeField] private float gestureCooldownSeconds = 0.8f;
 
     [Header("Editor Debug")]
@@ -28,8 +31,10 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
     private XRHandSubsystem handSubsystem;
     private float viewSwitchHold;
+    private float restartHold;
     private float gestureCooldown;
     private bool viewModeCycleRequested;
+    private bool restartRaceRequested;
     private bool trackEditorToggleRequested;
     private bool trackEditorAddCheckpointRequested;
     private bool trackEditorSaveRequested;
@@ -40,8 +45,10 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     public bool HandsTracked { get; private set; }
     public Vector3 WorldMoveDirection { get; private set; } = Vector3.forward;
     public float Throttle01 { get; private set; }
+    public float HandSeparationMeters { get; private set; }
     public bool HasUsableInput { get; private set; }
     public bool ViewModeCycleRequested => viewModeCycleRequested;
+    public bool RestartRaceRequested => restartRaceRequested;
     public bool TrackEditorToggleRequested => trackEditorToggleRequested;
     public bool TrackEditorAddCheckpointRequested => trackEditorAddCheckpointRequested;
     public bool TrackEditorSaveRequested => trackEditorSaveRequested;
@@ -54,6 +61,11 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     public void ConsumeViewModeCycleRequest()
     {
         viewModeCycleRequested = false;
+    }
+
+    public void ConsumeRestartRaceRequest()
+    {
+        restartRaceRequested = false;
     }
 
     public void ConsumeTrackEditorToggleRequest()
@@ -102,6 +114,7 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     private void Update()
     {
         viewModeCycleRequested = false;
+        restartRaceRequested = false;
         trackEditorToggleRequested = false;
         trackEditorAddCheckpointRequested = false;
         trackEditorSaveRequested = false;
@@ -148,19 +161,24 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         HandsTracked = leftTracked && rightTracked;
         Throttle01 = 0f;
+        HandSeparationMeters = 0f;
         HasUsableInput = false;
         ActiveInputSource = HandsTracked ? "Open hand stop" : "No input";
 
         if (HandsTracked &&
             leftFist &&
-            rightFist &&
-            TryBuildRelativeHandMoveDirection(leftPosition, rightPosition, out var moveDirection))
+            TryBuildRelativeHandMoveDirection(leftPosition, rightPosition, rightFist, out var moveDirection, out var handSeparationMeters))
         {
             WorldMoveDirection = SmoothDirection(WorldMoveDirection, moveDirection);
-            Throttle01 = Mathf.Clamp01(fistFlightThrottle);
+            HandSeparationMeters = handSeparationMeters;
+            Throttle01 = rightFist ? CalculateThrottle(handSeparationMeters) : 1f;
             HasUsableInput = Throttle01 > 0.04f;
-            ActiveInputSource = "Two-fist relative steering";
+            ActiveInputSource = rightFist
+                ? $"Two-fist {Throttle01 * 100f:0}%"
+                : "Right flat 70 m/s";
         }
+
+        UpdateRestartGesture(HandsTracked, leftFist, rightFist);
 
         if (leftGestureTracked)
         {
@@ -179,12 +197,48 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
     }
 
-    private bool TryBuildRelativeHandMoveDirection(Vector3 leftHandPosition, Vector3 rightHandPosition, out Vector3 direction)
+    private void UpdateRestartGesture(bool handsTracked, bool leftFist, bool rightFist)
+    {
+        if (gestureCooldown > 0f)
+        {
+            restartHold = 0f;
+            return;
+        }
+
+        if (handsTracked && !leftFist && !rightFist)
+        {
+            restartHold += Time.deltaTime;
+            if (restartHold >= restartHoldSeconds)
+            {
+                restartRaceRequested = true;
+                restartHold = 0f;
+                gestureCooldown = gestureCooldownSeconds;
+            }
+        }
+        else
+        {
+            restartHold = 0f;
+        }
+    }
+
+    private bool TryBuildRelativeHandMoveDirection(
+        Vector3 leftHandPosition,
+        Vector3 rightHandPosition,
+        bool requireSpeedDeadZone,
+        out Vector3 direction,
+        out float handSeparationMeters)
     {
         direction = Vector3.forward;
+        handSeparationMeters = 0f;
 
         var trackingDirection = rightHandPosition - leftHandPosition;
-        if (trackingDirection.magnitude < relativeHandDeadZoneMeters)
+        handSeparationMeters = trackingDirection.magnitude;
+        if (requireSpeedDeadZone && handSeparationMeters < relativeHandDeadZoneMeters)
+        {
+            return false;
+        }
+
+        if (handSeparationMeters < 0.02f)
         {
             return false;
         }
@@ -199,6 +253,14 @@ public sealed class HandGestureFlightInput : MonoBehaviour
 
         direction.Normalize();
         return true;
+    }
+
+    private float CalculateThrottle(float handSeparationMeters)
+    {
+        var fullSpeedDistance = Mathf.Max(relativeHandDeadZoneMeters + 0.01f, fullSpeedHandSeparationMeters);
+        var distance01 = Mathf.InverseLerp(relativeHandDeadZoneMeters, fullSpeedDistance, handSeparationMeters);
+        var curved = Mathf.Pow(Mathf.Clamp01(distance01), Mathf.Max(0.05f, speedResponseExponent));
+        return Mathf.Lerp(minimumFlightThrottle, 1f, curved);
     }
 
     private Vector3 SmoothDirection(Vector3 currentDirection, Vector3 targetDirection)

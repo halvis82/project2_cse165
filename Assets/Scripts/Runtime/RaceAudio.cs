@@ -6,7 +6,11 @@ public sealed class RaceAudio : MonoBehaviour
     [SerializeField] private AudioSource motorSource;
     [SerializeField] private AudioSource effectsSource;
     [SerializeField] private AudioSource waypointSource;
-    [SerializeField] private float maxSpeedForPitch = 35f;
+    [SerializeField] private float maxSpeedForPitch = 70f;
+    [SerializeField] private float motorMinVolume = 0.07f;
+    [SerializeField] private float motorMaxVolume = 0.42f;
+    [SerializeField] private float motorMinPitch = 0.55f;
+    [SerializeField] private float motorMaxPitch = 2.15f;
 
     private AudioClip countdownClip;
     private AudioClip checkpointClip;
@@ -30,7 +34,7 @@ public sealed class RaceAudio : MonoBehaviour
 
         if (motorSource != null && motorSource.clip == null)
         {
-            motorSource.clip = MakeTone("MotorLoop", 95f, 1f, 0.18f);
+            motorSource.clip = MakeMotorLoop();
             motorSource.loop = true;
             motorSource.spatialBlend = 0f;
             motorSource.Play();
@@ -45,8 +49,8 @@ public sealed class RaceAudio : MonoBehaviour
         }
 
         var speed01 = Mathf.Clamp01(droneController.CurrentSpeedMetersPerSecond / maxSpeedForPitch);
-        motorSource.volume = Mathf.Lerp(0.05f, 0.28f, speed01);
-        motorSource.pitch = Mathf.Lerp(0.65f, 1.75f, speed01);
+        motorSource.volume = Mathf.Lerp(motorMinVolume, motorMaxVolume, speed01);
+        motorSource.pitch = Mathf.Lerp(motorMinPitch, motorMaxPitch, speed01);
     }
 
     public void SetWaypoint(Vector3 position)
@@ -109,6 +113,30 @@ public sealed class RaceAudio : MonoBehaviour
         }
 
         var clip = AudioClip.Create(name, sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+        return clip;
+    }
+
+    private static AudioClip MakeMotorLoop()
+    {
+        const int sampleRate = 44100;
+        const float durationSeconds = 1f;
+        var sampleCount = Mathf.CeilToInt(sampleRate * durationSeconds);
+        var samples = new float[sampleCount];
+
+        for (var i = 0; i < sampleCount; i++)
+        {
+            var t = i / (float)sampleRate;
+            var baseWave =
+                Mathf.Sin(2f * Mathf.PI * 72f * t) * 0.48f +
+                Mathf.Sin(2f * Mathf.PI * 144f * t) * 0.26f +
+                Mathf.Sin(2f * Mathf.PI * 216f * t) * 0.14f +
+                Mathf.Sin(2f * Mathf.PI * 31f * t) * 0.12f;
+            var rotorChop = 0.72f + 0.28f * Mathf.Sin(2f * Mathf.PI * 18f * t);
+            samples[i] = baseWave * rotorChop * 0.38f;
+        }
+
+        var clip = AudioClip.Create("MotorLoop", sampleCount, 1, sampleRate, false);
         clip.SetData(samples, 0);
         return clip;
     }

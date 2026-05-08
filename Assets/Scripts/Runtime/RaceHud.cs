@@ -12,6 +12,7 @@ public sealed class RaceHud : MonoBehaviour
     [SerializeField] private Text speedText;
     [SerializeField] private Text selectedStateText;
     [SerializeField] private Text infoPanelText;
+    [SerializeField] private Text controlsText;
 
     private void Awake()
     {
@@ -125,6 +126,16 @@ public sealed class RaceHud : MonoBehaviour
         }
     }
 
+    public void SetControlsPanel(string controls)
+    {
+        EnsureInfoPanel();
+
+        if (controlsText != null)
+        {
+            controlsText.text = controls;
+        }
+    }
+
     public void SetWayfindingVisible(bool visible)
     {
         if (targetText != null)
@@ -140,7 +151,7 @@ public sealed class RaceHud : MonoBehaviour
 
     private void EnsureInfoPanel()
     {
-        if (selectedStateText != null && infoPanelText != null)
+        if (selectedStateText != null && infoPanelText != null && controlsText != null)
         {
             return;
         }
@@ -149,10 +160,11 @@ public sealed class RaceHud : MonoBehaviour
         {
             selectedStateText = CreateInfoText(
                 "Live Selected State",
-                new Vector2(358f, -18f),
-                new Vector2(330f, 34f),
-                20,
-                TextAnchor.UpperRight);
+                new Vector2(-18f, -18f),
+                new Vector2(300f, 34f),
+                18,
+                TextAnchor.UpperRight,
+                true);
 
             if (selectedStateText != null)
             {
@@ -167,10 +179,11 @@ public sealed class RaceHud : MonoBehaviour
         {
             infoPanelText = CreateInfoText(
                 "Live Race Info",
-                new Vector2(358f, -52f),
-                new Vector2(360f, 155f),
-                13,
-                TextAnchor.UpperRight);
+                new Vector2(-18f, -52f),
+                new Vector2(300f, 150f),
+                12,
+                TextAnchor.UpperRight,
+                true);
 
             if (infoPanelText != null)
             {
@@ -180,9 +193,28 @@ public sealed class RaceHud : MonoBehaviour
                 outline.effectDistance = new Vector2(1f, -1f);
             }
         }
+
+        if (controlsText == null)
+        {
+            controlsText = CreateInfoText(
+                "Controls Help",
+                new Vector2(18f, -130f),
+                new Vector2(330f, 205f),
+                13,
+                TextAnchor.UpperLeft,
+                false);
+
+            if (controlsText != null)
+            {
+                controlsText.color = Color.white;
+                var outline = controlsText.gameObject.AddComponent<Outline>();
+                outline.effectColor = new Color(0f, 0f, 0f, 0.75f);
+                outline.effectDistance = new Vector2(1f, -1f);
+            }
+        }
     }
 
-    private Text CreateInfoText(string objectName, Vector2 anchoredPosition, Vector2 size, int fontSize, TextAnchor alignment)
+    private Text CreateInfoText(string objectName, Vector2 anchoredPosition, Vector2 size, int fontSize, TextAnchor alignment, bool anchorRight)
     {
         var rectTransform = transform as RectTransform;
         if (rectTransform == null)
@@ -194,9 +226,9 @@ public sealed class RaceHud : MonoBehaviour
         textObject.transform.SetParent(transform, false);
 
         var childRect = textObject.GetComponent<RectTransform>();
-        childRect.anchorMin = new Vector2(1f, 1f);
-        childRect.anchorMax = new Vector2(1f, 1f);
-        childRect.pivot = new Vector2(1f, 1f);
+        childRect.anchorMin = anchorRight ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
+        childRect.anchorMax = anchorRight ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
+        childRect.pivot = anchorRight ? new Vector2(1f, 1f) : new Vector2(0f, 1f);
         childRect.anchoredPosition = anchoredPosition;
         childRect.sizeDelta = size;
 

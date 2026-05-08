@@ -329,9 +329,11 @@ public sealed class RaceManager : MonoBehaviour
         timerRunning = false;
         finished = false;
         crashResetInProgress = false;
+        audioOnlyWayfindingMode = false;
 
         PlaceDroneAtCheckpoint(lastClearedIndex);
         checkpointTrack.SetCurrentIndex(currentTargetIndex);
+        SetVisualWayfinding(true);
         if (applyPreferredStartingView)
         {
             ApplyPreferredStartingView();
@@ -482,9 +484,14 @@ public sealed class RaceManager : MonoBehaviour
     private void ToggleAudioOnlyWayfinding()
     {
         audioOnlyWayfindingMode = !audioOnlyWayfindingMode;
-        wayfindingSystem?.SetVisualWayfindingEnabled(!audioOnlyWayfindingMode);
-        hud?.SetWayfindingVisible(!audioOnlyWayfindingMode);
+        SetVisualWayfinding(!audioOnlyWayfindingMode);
         SetStatus(audioOnlyWayfindingMode ? "Audio-only wayfinding" : "Visual wayfinding on");
+    }
+
+    private void SetVisualWayfinding(bool visible)
+    {
+        wayfindingSystem?.SetVisualWayfindingEnabled(visible);
+        hud?.SetWayfindingVisible(visible);
     }
 
     private string GetSavedTrackFolder()

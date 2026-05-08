@@ -17,6 +17,8 @@ public sealed class HandGestureFlightInput : MonoBehaviour
     [SerializeField] private float verticalDirectionWeight = 1.15f;
 
     [Header("Gestures")]
+    [SerializeField] private float fistStopThreshold = 0.72f;
+    [SerializeField] private float fistPalmDistanceMeters = 0.115f;
     [SerializeField] private float viewSwitchHoldSeconds = 0.75f;
     [SerializeField] private float gestureCooldownSeconds = 0.8f;
 
@@ -149,11 +151,12 @@ public sealed class HandGestureFlightInput : MonoBehaviour
             }
         }
 
+        var leftFistStop = TryGetLeftFistStop(hasHandSubsystem);
         var rightHeightTracked = TryGetRightHandVerticalInput(hasHandSubsystem, out var verticalInput, out var verticalSource);
         HandsTracked = leftTracked;
-        Throttle01 = leftTracked ? Mathf.Clamp01(leftPinch) : 0f;
+        Throttle01 = leftTracked && !leftFistStop ? Mathf.Clamp01(leftPinch) : 0f;
         ActiveInputSource = HandsTracked
-            ? rightHeightTracked ? $"Look + {verticalSource}" : "Look"
+            ? leftFistStop ? "Fist brake" : rightHeightTracked ? $"Look + {verticalSource}" : "Look"
             : "No input";
 
         if (TryBuildSupermanMoveDirection(verticalInput, out var moveDirection))
@@ -162,10 +165,13 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         }
 
         HasUsableInput = HandsTracked && Throttle01 > 0.04f;
-        UpdateModeGesture(leftPinch, rightPinch);
-        if (hasHandSubsystem)
+        if (!leftFistStop)
         {
-            UpdateExtraGestures();
+            UpdateModeGesture(leftPinch, rightPinch);
+            if (hasHandSubsystem)
+            {
+                UpdateExtraGestures();
+            }
         }
 
         if (!HandsTracked && !TryUseEditorDebugInput())
@@ -230,6 +236,50 @@ public sealed class HandGestureFlightInput : MonoBehaviour
         var range = Mathf.Max(verticalDeadZoneMeters + 0.01f, verticalFullRangeMeters);
         verticalInput = Mathf.Sign(offset) * Mathf.InverseLerp(verticalDeadZoneMeters, range, magnitude);
         verticalInput = Mathf.Clamp(verticalInput, -1f, 1f);
+        return true;
+    }
+
+    private bool TryGetLeftFistStop(bool hasHandSubsystem)
+    {
+        var left = MetaAimHand.left;
+        if (HasValidMetaAimHand(left))
+        {
+            var index = ReadMetaPinch(left, hand => hand.pinchStrengthIndex);
+            var middle = ReadMetaPinch(left, hand => hand.pinchStrengthMiddle);
+            var ring = ReadMetaPinch(left, hand => hand.pinchStrengthRing);
+            var little = ReadMetaPinch(left, hand => hand.pinchStrengthLittle);
+            if (index >= fistStopThreshold &&
+                middle >= fistStopThreshold &&
+                ring >= fistStopThreshold &&
+                little >= fistStopThreshold)
+            {
+                return true;
+            }
+        }
+
+        if (!hasHandSubsystem)
+        {
+            return false;
+        }
+
+        return TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.IndexTip, out var indexCurl) &&
+               TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.MiddleTip, out var middleCurl) &&
+               TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.RingTip, out var ringCurl) &&
+               TryGetFingerCurl(handSubsystem.leftHand, XRHandJointID.LittleTip, out var littleCurl) &&
+               indexCurl && middleCurl && ringCurl && littleCurl;
+    }
+
+    private bool TryGetFingerCurl(XRHand hand, XRHandJointID fingerTipId, out bool curled)
+    {
+        curled = false;
+        var palm = hand.GetJoint(XRHandJointID.Palm);
+        var fingerTip = hand.GetJoint(fingerTipId);
+        if (!palm.TryGetPose(out var palmPose) || !fingerTip.TryGetPose(out var fingerPose))
+        {
+            return false;
+        }
+
+        curled = Vector3.Distance(palmPose.position, fingerPose.position) <= fistPalmDistanceMeters;
         return true;
     }
 

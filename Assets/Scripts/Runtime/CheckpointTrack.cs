@@ -151,15 +151,15 @@ public sealed class CheckpointTrack : MonoBehaviour
 
             if (i < currentIndex)
             {
-                visuals[i].SetState(clearedColor, false, visualRadiusMeters * 0.22f);
+                visuals[i].SetState(clearedColor, false, visualRadiusMeters * 0.5f);
             }
             else if (i == currentIndex)
             {
-                visuals[i].SetState(currentColor, true, visualRadiusMeters * 0.55f);
+                visuals[i].SetState(currentColor, true, visualRadiusMeters * 2f);
             }
             else
             {
-                visuals[i].SetState(pendingColor, false, visualRadiusMeters * 0.32f);
+                visuals[i].SetState(pendingColor, false, visualRadiusMeters * 0.9f);
             }
         }
     }

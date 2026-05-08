@@ -20,6 +20,7 @@ public sealed class RaceManager : MonoBehaviour
     [SerializeField] private string savedTrackFolderName = "TrainingTracks";
     [SerializeField] private bool enableGhostChampion = true;
     [SerializeField] private float ghostSampleRateHz = 90f;
+    [SerializeField] private float checkpointSweepTeleportThresholdMeters = 45f;
 
     private int currentTargetIndex = 1;
     private int lastClearedIndex;
@@ -38,6 +39,8 @@ public sealed class RaceManager : MonoBehaviour
     private Vector3 lastGhostPosePosition;
     private Quaternion lastGhostPoseRotation = Quaternion.identity;
     private bool hasGhostPreviousPose;
+    private Vector3 previousCheckpointSamplePosition;
+    private bool hasPreviousCheckpointSamplePosition;
     private float bestGhostDurationSeconds = float.PositiveInfinity;
     private GameObject ghostChampionObject;
     private readonly List<GhostSample> currentRunSamples = new List<GhostSample>();
@@ -254,12 +257,16 @@ public sealed class RaceManager : MonoBehaviour
             return;
         }
 
-        var distance = Vector3.Distance(droneController.transform.position, CurrentTargetPosition);
-        if (distance > checkpointTrack.ReachRadiusMeters)
+        var currentPosition = droneController.transform.position;
+        if (!ReachedCurrentCheckpoint(currentPosition))
         {
+            previousCheckpointSamplePosition = currentPosition;
+            hasPreviousCheckpointSamplePosition = true;
             return;
         }
 
+        previousCheckpointSamplePosition = currentPosition;
+        hasPreviousCheckpointSamplePosition = true;
         lastClearedIndex = currentTargetIndex;
         raceAudio?.PlayCheckpoint();
 
@@ -379,6 +386,43 @@ public sealed class RaceManager : MonoBehaviour
         var spawnRotation = Quaternion.identity;
 #endif
         droneController.Teleport(position, spawnRotation);
+        previousCheckpointSamplePosition = position;
+        hasPreviousCheckpointSamplePosition = true;
+    }
+
+    private bool ReachedCurrentCheckpoint(Vector3 currentPosition)
+    {
+        var target = CurrentTargetPosition;
+        var reachRadius = checkpointTrack.ReachRadiusMeters;
+        if (Vector3.Distance(currentPosition, target) <= reachRadius)
+        {
+            return true;
+        }
+
+        if (!hasPreviousCheckpointSamplePosition)
+        {
+            return false;
+        }
+
+        if (Vector3.Distance(previousCheckpointSamplePosition, currentPosition) > checkpointSweepTeleportThresholdMeters)
+        {
+            return false;
+        }
+
+        return DistancePointToSegment(target, previousCheckpointSamplePosition, currentPosition) <= reachRadius;
+    }
+
+    private static float DistancePointToSegment(Vector3 point, Vector3 segmentStart, Vector3 segmentEnd)
+    {
+        var segment = segmentEnd - segmentStart;
+        var lengthSquared = segment.sqrMagnitude;
+        if (lengthSquared <= 0.0001f)
+        {
+            return Vector3.Distance(point, segmentStart);
+        }
+
+        var t = Mathf.Clamp01(Vector3.Dot(point - segmentStart, segment) / lengthSquared);
+        return Vector3.Distance(point, segmentStart + segment * t);
     }
 
     private void ToggleTrackEditorMode()
